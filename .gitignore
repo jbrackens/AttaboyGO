@@ -1,0 +1,18 @@
+# Binaries
+bin/
+migrate
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Environment
+.env
+
+# Test
+coverage.out
