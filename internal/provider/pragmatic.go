@@ -47,11 +47,21 @@ type PragmaticResponse struct {
 }
 
 // VerifySignature validates the HMAC-SHA256 hash for a Pragmatic request.
+// The signature is computed over the body with the hash field excluded.
 func (a *PragmaticAdapter) VerifySignature(body []byte, providedHash string) bool {
+	stripped := stripJSONField(body, "hash")
 	mac := hmac.New(sha256.New, []byte(a.secretKey))
-	mac.Write(body)
+	mac.Write(stripped)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(expected), []byte(providedHash))
+}
+
+// ComputeSignature computes the HMAC-SHA256 hash for a Pragmatic request body.
+func (a *PragmaticAdapter) ComputeSignature(body []byte) string {
+	stripped := stripJSONField(body, "hash")
+	mac := hmac.New(sha256.New, []byte(a.secretKey))
+	mac.Write(stripped)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // ParseRequest extracts a Pragmatic Play request from an HTTP request.

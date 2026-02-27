@@ -10,17 +10,34 @@ import (
 func TestBetSolutionsAdapter_VerifySignature(t *testing.T) {
 	adapter := NewBetSolutionsAdapter("test-secret", nil)
 
+	// Body without Hash field — compute valid signature
 	body := []byte(`{"Token":"abc","PlayerId":"123"}`)
+	validHash := adapter.ComputeSignature(body)
 
-	// Verify invalid hash is rejected
-	result := adapter.VerifySignature(body, "invalid-hash")
-	assert.False(t, result)
+	// Valid hash should pass
+	assert.True(t, adapter.VerifySignature(body, validHash))
+
+	// Body with Hash field included — signature should still work
+	// because VerifySignature strips the Hash field before computing
+	bodyWithHash := []byte(`{"Token":"abc","PlayerId":"123","Hash":"` + validHash + `"}`)
+	assert.True(t, adapter.VerifySignature(bodyWithHash, validHash))
+
+	// Invalid hash should fail
+	assert.False(t, adapter.VerifySignature(body, "invalid-hash"))
 }
 
 func TestPragmaticAdapter_VerifySignature(t *testing.T) {
 	adapter := NewPragmaticAdapter("test-secret", nil)
 
 	body := []byte(`{"userId":"abc","action":"balance"}`)
+	validHash := adapter.ComputeSignature(body)
+
+	assert.True(t, adapter.VerifySignature(body, validHash))
+
+	// Body with hash field included
+	bodyWithHash := []byte(`{"userId":"abc","action":"balance","hash":"` + validHash + `"}`)
+	assert.True(t, adapter.VerifySignature(bodyWithHash, validHash))
+
 	assert.False(t, adapter.VerifySignature(body, "wrong-hash"))
 }
 

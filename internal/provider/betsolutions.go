@@ -45,11 +45,21 @@ type BetSolutionsResponse struct {
 }
 
 // VerifySignature validates the HMAC-SHA256 hash for a BetSolutions request.
+// The signature is computed over the body with the Hash field excluded.
 func (a *BetSolutionsAdapter) VerifySignature(body []byte, providedHash string) bool {
+	stripped := stripJSONField(body, "Hash")
 	mac := hmac.New(sha256.New, []byte(a.hmacSecret))
-	mac.Write(body)
+	mac.Write(stripped)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(expected), []byte(providedHash))
+}
+
+// ComputeSignature computes the HMAC-SHA256 hash for a body with the given field excluded.
+func (a *BetSolutionsAdapter) ComputeSignature(body []byte) string {
+	stripped := stripJSONField(body, "Hash")
+	mac := hmac.New(sha256.New, []byte(a.hmacSecret))
+	mac.Write(stripped)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // ParseRequest extracts and validates a BetSolutions request from an HTTP request.
@@ -149,6 +159,22 @@ func readAll(r interface{ Read([]byte) (int, error) }) ([]byte, error) {
 		}
 	}
 	return result, nil
+}
+
+// stripJSONField removes a top-level field from a JSON body by unmarshalling,
+// deleting the key, and re-marshalling. Used to exclude signature fields before
+// computing HMAC.
+func stripJSONField(body []byte, field string) []byte {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(body, &m); err != nil {
+		return body // fallback to original if not valid JSON
+	}
+	delete(m, field)
+	stripped, err := json.Marshal(m)
+	if err != nil {
+		return body
+	}
+	return stripped
 }
 
 // contextKey for wallet operations
