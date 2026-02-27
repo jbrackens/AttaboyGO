@@ -38,16 +38,19 @@ func (h *EngagementHandler) GetMyEngagement(w http.ResponseWriter, r *http.Reque
 
 	today := time.Now().Format("2006-01-02")
 	var resp engagementResponse
+	var dateVal time.Time
 	err = h.pool.QueryRow(r.Context(), `
 		SELECT date, video_minutes, social_interactions, prediction_actions,
 		       wager_count, deposit_count, score
 		FROM player_engagement WHERE player_id = $1 AND date = $2`,
 		playerID, today).Scan(
-		&resp.Date, &resp.VideoMinutes, &resp.SocialInteractions,
+		&dateVal, &resp.VideoMinutes, &resp.SocialInteractions,
 		&resp.PredictionActions, &resp.WagerCount, &resp.DepositCount, &resp.Score)
 	if err != nil {
 		// No engagement today — return zeros
 		resp.Date = today
+	} else {
+		resp.Date = dateVal.Format("2006-01-02")
 	}
 
 	RespondJSON(w, http.StatusOK, resp)

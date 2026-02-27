@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/attaboy/platform/internal/domain"
 	"github.com/attaboy/platform/internal/handler"
@@ -47,7 +48,7 @@ func (h *PlayerAdminHandler) SearchPlayers(w http.ResponseWriter, r *http.Reques
 		LastName      string    `json:"last_name"`
 		AccountStatus string    `json:"account_status"`
 		Verified      bool      `json:"verified"`
-		CreatedAt     string    `json:"created_at"`
+		CreatedAt     time.Time `json:"created_at"`
 		Currency      string    `json:"currency"`
 	}
 
