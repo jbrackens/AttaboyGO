@@ -5,8 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
+	"github.com/attaboy/platform/internal/guard"
 	"github.com/google/uuid"
 )
 
@@ -106,4 +108,34 @@ type responseWriter struct {
 func (w *responseWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// RateLimitMiddleware returns HTTP middleware that enforces a per-key rate limit.
+// keyFn extracts the rate-limit key from the request (typically client IP).
+func RateLimitMiddleware(rl *guard.RateLimiter, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			result := rl.Check(r.Context(), keyFn(r))
+			if !result.Allowed {
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(`{"code":"RATE_LIMITED","message":"too many requests"}`))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ClientIP extracts the client IP from a request, preferring X-Forwarded-For.
+func ClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i != -1 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if i := strings.LastIndex(r.RemoteAddr, ":"); i != -1 {
+		return r.RemoteAddr[:i]
+	}
+	return r.RemoteAddr
 }

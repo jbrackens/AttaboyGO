@@ -36,9 +36,12 @@ type Config struct {
 	// CORS
 	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
 
+	// Dev
+	AllowInsecureDefaults bool `env:"ALLOW_INSECURE_DEFAULTS" envDefault:"false"`
+
 	// External services
-	RandomOrgAPIKey string `env:"RANDOM_ORG_API_KEY"`
-	StripeSecretKey string `env:"STRIPE_SECRET_KEY"`
+	RandomOrgAPIKey     string `env:"RANDOM_ORG_API_KEY"`
+	StripeSecretKey     string `env:"STRIPE_SECRET_KEY"`
 	StripeWebhookSecret string `env:"STRIPE_WEBHOOK_SECRET"`
 }
 
@@ -49,6 +52,21 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	return cfg, nil
+}
+
+// Validate checks for insecure configuration that must not run in production.
+// Set ALLOW_INSECURE_DEFAULTS=true to bypass (local dev only).
+func (c *Config) Validate() error {
+	if c.AllowInsecureDefaults {
+		return nil
+	}
+	if c.JWTSecret == "change-me-in-production" {
+		return fmt.Errorf("JWT_SECRET is set to the insecure default; set a strong secret or set ALLOW_INSECURE_DEFAULTS=true for local dev")
+	}
+	if len(c.JWTSecret) < 32 {
+		return fmt.Errorf("JWT_SECRET is too short (%d chars); minimum 32 characters required", len(c.JWTSecret))
+	}
+	return nil
 }
 
 // DSN returns the PostgreSQL connection string, preferring DATABASE_URL if set.

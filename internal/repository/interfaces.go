@@ -49,6 +49,10 @@ type TransactionRepository interface {
 
 	// ListByGameRound returns all transactions in a casino game round.
 	ListByGameRound(ctx context.Context, db DBTX, gameRoundID string) ([]domain.Transaction, error)
+
+	// DailySumByType returns the total amount of transactions of the given type
+	// for a player since the start of the current calendar day (UTC).
+	DailySumByType(ctx context.Context, db DBTX, playerID uuid.UUID, txType string) (int64, error)
 }
 
 // OutboxRepository provides access to the event_outbox table.

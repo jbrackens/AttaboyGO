@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/attaboy/platform/internal/domain"
 	"github.com/attaboy/platform/internal/infra"
@@ -120,6 +121,21 @@ func (r *transactionRepo) ListByGameRound(ctx context.Context, db DBTX, gameRoun
 	defer rows.Close()
 
 	return collectTransactions(rows)
+}
+
+func (r *transactionRepo) DailySumByType(ctx context.Context, db DBTX, playerID uuid.UUID, txType string) (int64, error) {
+	now := time.Now().UTC()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	var total pgtype.Numeric
+	err := db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount), 0) FROM v2_transactions
+		WHERE player_id = $1 AND type = $2 AND created_at >= $3`,
+		playerID, txType, startOfDay).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("daily sum by type: %w", err)
+	}
+	return infra.NumericToInt64(total)
 }
 
 func scanTransaction(row pgx.Row) (*domain.Transaction, error) {

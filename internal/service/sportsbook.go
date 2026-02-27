@@ -8,6 +8,7 @@ import (
 
 	"github.com/attaboy/platform/internal/domain"
 	"github.com/attaboy/platform/internal/ledger"
+	"github.com/attaboy/platform/internal/policy"
 	"github.com/attaboy/platform/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,12 +18,13 @@ import (
 type SportsbookService struct {
 	pool   *pgxpool.Pool
 	engine *ledger.Engine
+	txRepo repository.TransactionRepository
 	logger *slog.Logger
 }
 
 // NewSportsbookService creates a SportsbookService.
-func NewSportsbookService(pool *pgxpool.Pool, engine *ledger.Engine, logger *slog.Logger) *SportsbookService {
-	return &SportsbookService{pool: pool, engine: engine, logger: logger}
+func NewSportsbookService(pool *pgxpool.Pool, txRepo repository.TransactionRepository, engine *ledger.Engine, logger *slog.Logger) *SportsbookService {
+	return &SportsbookService{pool: pool, engine: engine, txRepo: txRepo, logger: logger}
 }
 
 // PlaceBetInput holds the bet placement request.
@@ -48,9 +50,23 @@ func (s *SportsbookService) PlaceBet(ctx context.Context, playerID uuid.UUID, in
 		return nil, domain.ErrValidation("stake must be positive")
 	}
 
+	// Responsible gaming: check daily bet (loss) limit.
+	dailyBets, err := s.txRepo.DailySumByType(ctx, s.pool, playerID, string(domain.TxBet))
+	if err != nil {
+		return nil, domain.ErrInternal("rg daily bet query", err)
+	}
+	rgResult := policy.EvaluateRgLimits(policy.DefaultRgLimits(), input.Stake, "bet", 0, dailyBets)
+	if !rgResult.Allowed {
+		return nil, &domain.AppError{
+			Code:    "RG_LIMIT_BREACHED",
+			Message: fmt.Sprintf("bet exceeds %s limit", rgResult.BreachedLimit),
+			Status:  422,
+		}
+	}
+
 	// Fetch selection for odds
 	var odds int
-	err := s.pool.QueryRow(ctx,
+	err = s.pool.QueryRow(ctx,
 		`SELECT odds_decimal FROM sports_selections WHERE id = $1 AND status = 'active'`,
 		input.SelectionID).Scan(&odds)
 	if err != nil {

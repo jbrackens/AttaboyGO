@@ -8,6 +8,7 @@ import (
 
 	"github.com/attaboy/platform/internal/domain"
 	"github.com/attaboy/platform/internal/ledger"
+	"github.com/attaboy/platform/internal/policy"
 	"github.com/attaboy/platform/internal/provider"
 	"github.com/attaboy/platform/internal/repository"
 	"github.com/google/uuid"
@@ -16,12 +17,13 @@ import (
 
 // PaymentService handles deposit and withdrawal orchestration.
 type PaymentService struct {
-	pool       *pgxpool.Pool
-	stripe     *provider.StripeProvider
-	payments   repository.PaymentRepository
-	players    repository.PlayerRepository
-	engine     *ledger.Engine
-	logger     *slog.Logger
+	pool     *pgxpool.Pool
+	stripe   *provider.StripeProvider
+	payments repository.PaymentRepository
+	players  repository.PlayerRepository
+	txRepo   repository.TransactionRepository
+	engine   *ledger.Engine
+	logger   *slog.Logger
 }
 
 // NewPaymentService creates a PaymentService.
@@ -30,6 +32,7 @@ func NewPaymentService(
 	stripe *provider.StripeProvider,
 	payments repository.PaymentRepository,
 	players repository.PlayerRepository,
+	txRepo repository.TransactionRepository,
 	engine *ledger.Engine,
 	logger *slog.Logger,
 ) *PaymentService {
@@ -38,6 +41,7 @@ func NewPaymentService(
 		stripe:   stripe,
 		payments: payments,
 		players:  players,
+		txRepo:   txRepo,
 		engine:   engine,
 		logger:   logger,
 	}
@@ -54,6 +58,20 @@ type DepositSession struct {
 func (s *PaymentService) InitiateDeposit(ctx context.Context, playerID uuid.UUID, amount int64, currency, successURL, cancelURL string) (*DepositSession, error) {
 	if currency == "" {
 		currency = "EUR"
+	}
+
+	// Responsible gaming: check daily deposit limit before hitting Stripe.
+	dailyDeposits, err := s.txRepo.DailySumByType(ctx, s.pool, playerID, string(domain.TxDeposit))
+	if err != nil {
+		return nil, domain.ErrInternal("rg daily deposit query", err)
+	}
+	rgResult := policy.EvaluateRgLimits(policy.DefaultRgLimits(), amount, "wallet_deposit", dailyDeposits, 0)
+	if !rgResult.Allowed {
+		return nil, &domain.AppError{
+			Code:    "RG_LIMIT_BREACHED",
+			Message: fmt.Sprintf("deposit exceeds %s limit", rgResult.BreachedLimit),
+			Status:  422,
+		}
 	}
 
 	// Create Stripe checkout session

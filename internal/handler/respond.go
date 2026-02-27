@@ -31,6 +31,8 @@ func RespondError(w http.ResponseWriter, err error) {
 }
 
 // DecodeJSON reads and decodes a JSON request body into dst.
+// Bodies larger than 1 MiB are rejected.
 func DecodeJSON(r *http.Request, dst interface{}) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20) // 1 MiB
 	return json.NewDecoder(r.Body).Decode(dst)
 }

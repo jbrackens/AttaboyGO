@@ -2,8 +2,10 @@ package app
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/attaboy/platform/internal/auth"
+	"github.com/attaboy/platform/internal/guard"
 	"github.com/attaboy/platform/internal/handler"
 	adminhandler "github.com/attaboy/platform/internal/handler/admin"
 	"github.com/attaboy/platform/internal/ledger"
@@ -51,8 +53,8 @@ func NewRouter(deps RouterDeps) chi.Router {
 
 	// Services
 	authSvc := service.NewAuthService(pool, authUserRepo, playerRepo, profileRepo, jwtMgr)
-	paymentSvc := service.NewPaymentService(pool, stripeProvider, paymentRepo, playerRepo, ledgerEngine, logger)
-	sportsbookSvc := service.NewSportsbookService(pool, ledgerEngine, logger)
+	paymentSvc := service.NewPaymentService(pool, stripeProvider, paymentRepo, playerRepo, txRepo, ledgerEngine, logger)
+	sportsbookSvc := service.NewSportsbookService(pool, txRepo, ledgerEngine, logger)
 	affiliateSvc := service.NewAffiliateService(pool, jwtMgr, logger)
 	pluginSvc := service.NewPluginService(pool, logger)
 
@@ -92,14 +94,18 @@ func NewRouter(deps RouterDeps) chi.Router {
 	r.Use(handler.CORSWithOrigins(deps.CORSAllowedOrigins))
 	r.Use(handler.JSONContentType)
 
+	// Auth rate limiter: 10 attempts per 15 minutes per IP
+	authRateLimiter := guard.NewRateLimiter(10, 15*time.Minute)
+
 	// Health (no auth)
 	r.Get("/health", handler.HealthHandler(pool))
 
 	// Webhooks (no auth, no JSON content-type — raw body required for signature verification)
 	r.Post("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
 
-	// Auth routes (no auth)
+	// Auth routes (no auth, rate-limited by IP)
 	r.Route("/auth", func(r chi.Router) {
+		r.Use(handler.RateLimitMiddleware(authRateLimiter, handler.ClientIP))
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 	})
