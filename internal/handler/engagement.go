@@ -78,17 +78,22 @@ func (h *EngagementHandler) RecordSignal(w http.ResponseWriter, r *http.Request)
 	today := time.Now().Format("2006-01-02")
 
 	// Upsert engagement for today
-	var colExpr string
+	var colName, colExpr string
 	switch input.Type {
 	case "video":
+		colName = "video_minutes"
 		colExpr = "video_minutes = player_engagement.video_minutes + $3"
 	case "social":
+		colName = "social_interactions"
 		colExpr = "social_interactions = player_engagement.social_interactions + $3"
 	case "prediction":
+		colName = "prediction_actions"
 		colExpr = "prediction_actions = player_engagement.prediction_actions + $3"
 	case "wager":
+		colName = "wager_count"
 		colExpr = "wager_count = player_engagement.wager_count + $3"
 	case "deposit":
+		colName = "deposit_count"
 		colExpr = "deposit_count = player_engagement.deposit_count + $3"
 	default:
 		RespondError(w, domain.ErrValidation("invalid signal type"))
@@ -97,7 +102,7 @@ func (h *EngagementHandler) RecordSignal(w http.ResponseWriter, r *http.Request)
 
 	// Use upsert to create or update daily engagement
 	_, err = h.pool.Exec(r.Context(), `
-		INSERT INTO player_engagement (player_id, date, `+input.Type+`_count, score)
+		INSERT INTO player_engagement (player_id, date, `+colName+`, score)
 		VALUES ($1, $2, $3, 0)
 		ON CONFLICT (player_id, date) DO UPDATE SET `+colExpr+`, updated_at = now()`,
 		playerID, today, input.Value)

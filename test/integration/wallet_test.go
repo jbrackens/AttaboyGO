@@ -344,7 +344,7 @@ func TestTransactions_CursorPagination(t *testing.T) {
 		Transactions []json.RawMessage `json:"transactions"`
 	}
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&page2))
-	assert.Len(t, page2.Transactions, 1)
+	assert.Len(t, page2.Transactions, 2)
 }
 
 func TestTransactions_PlayerIsolation(t *testing.T) {

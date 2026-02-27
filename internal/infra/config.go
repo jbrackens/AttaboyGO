@@ -33,6 +33,9 @@ type Config struct {
 	KafkaBrokers string `env:"KAFKA_BROKERS" envDefault:"localhost:9092"`
 	KafkaEnabled bool   `env:"KAFKA_ENABLED" envDefault:"false"`
 
+	// CORS
+	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
+
 	// External services
 	RandomOrgAPIKey string `env:"RANDOM_ORG_API_KEY"`
 	StripeSecretKey string `env:"STRIPE_SECRET_KEY"`

@@ -84,8 +84,9 @@ func (r *transactionRepo) ListByPlayer(ctx context.Context, db DBTX, playerID uu
 			       external_transaction_id, manufacturer_id, sub_transaction_id,
 			       target_transaction_id, game_round_id, metadata, created_at
 			FROM v2_transactions
-			WHERE player_id = $1 AND created_at < (SELECT created_at FROM v2_transactions WHERE id = $2)
-			ORDER BY created_at DESC
+			WHERE player_id = $1
+			  AND (created_at, id) <= ((SELECT created_at, id FROM v2_transactions WHERE id = $2))
+			ORDER BY created_at DESC, id DESC
 			LIMIT $3`, playerID, *cursor, limit)
 	} else {
 		rows, err = db.Query(ctx, `
@@ -94,7 +95,7 @@ func (r *transactionRepo) ListByPlayer(ctx context.Context, db DBTX, playerID uu
 			       target_transaction_id, game_round_id, metadata, created_at
 			FROM v2_transactions
 			WHERE player_id = $1
-			ORDER BY created_at DESC
+			ORDER BY created_at DESC, id DESC
 			LIMIT $2`, playerID, limit)
 	}
 	if err != nil {

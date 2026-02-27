@@ -187,6 +187,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		StripeWebhookSecret: "",
 		RandomOrgAPIKey:     "",
 		SlotopolBaseURL:     "http://localhost:4002",
+		CORSAllowedOrigins:  "*",
 	})
 
 	server := httptest.NewServer(router)

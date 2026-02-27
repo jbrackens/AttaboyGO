@@ -69,6 +69,7 @@ func run(logger *slog.Logger) error {
 		StripeWebhookSecret: cfg.StripeWebhookSecret,
 		RandomOrgAPIKey:     cfg.RandomOrgAPIKey,
 		SlotopolBaseURL:     "http://localhost:4002",
+		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 	})
 
 	// Start server

@@ -20,10 +20,11 @@ type RouterDeps struct {
 	JWTMgr *auth.JWTManager
 	Logger *slog.Logger
 	// External provider config
-	StripeSecretKey    string
+	StripeSecretKey     string
 	StripeWebhookSecret string
-	RandomOrgAPIKey    string
-	SlotopolBaseURL    string
+	RandomOrgAPIKey     string
+	SlotopolBaseURL     string
+	CORSAllowedOrigins  string
 }
 
 // NewRouter assembles the chi.Router with all routes and middleware.
@@ -88,7 +89,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 	r.Use(handler.Recovery(logger))
 	r.Use(handler.RequestID)
 	r.Use(handler.RequestLogger(logger))
-	r.Use(handler.CORS)
+	r.Use(handler.CORSWithOrigins(deps.CORSAllowedOrigins))
 	r.Use(handler.JSONContentType)
 
 	// Health (no auth)
