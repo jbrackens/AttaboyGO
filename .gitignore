@@ -16,3 +16,6 @@ migrate
 
 # Test
 coverage.out
+
+# Worktrees
+.worktrees/
