@@ -62,6 +62,37 @@ func (r *outboxRepo) FetchUnpublished(ctx context.Context, db DBTX, limit int) (
 	return events, rows.Err()
 }
 
+// OutboxRow wraps an OutboxDraft with its database sequence ID.
+type OutboxRow struct {
+	SeqID int64
+	domain.OutboxDraft
+}
+
+func (r *outboxRepo) FetchUnpublishedRows(ctx context.Context, db DBTX, limit int) ([]OutboxRow, error) {
+	rows, err := db.Query(ctx, `
+		SELECT "id", "eventId", "aggregateType", "aggregateId", "eventType",
+		       "partitionKey", "headers", "payload", "occurredAt"
+		FROM event_outbox
+		ORDER BY "id" ASC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("fetch unpublished rows: %w", err)
+	}
+	defer rows.Close()
+
+	var events []OutboxRow
+	for rows.Next() {
+		var row OutboxRow
+		err := rows.Scan(&row.SeqID, &row.EventID, &row.AggregateType, &row.AggregateID,
+			&row.EventType, &row.PartitionKey, &row.Headers, &row.Payload, &row.OccurredAt)
+		if err != nil {
+			return nil, fmt.Errorf("scan outbox row: %w", err)
+		}
+		events = append(events, row)
+	}
+	return events, rows.Err()
+}
+
 func (r *outboxRepo) MarkPublished(ctx context.Context, db DBTX, ids []int64) error {
 	if len(ids) == 0 {
 		return nil

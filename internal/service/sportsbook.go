@@ -220,6 +220,156 @@ func (s *SportsbookService) ListMarkets(ctx context.Context, db repository.DBTX,
 	return markets, rows.Err()
 }
 
+// SettleEventResult holds the summary of an event settlement.
+type SettleEventResult struct {
+	Settled int `json:"settled"`
+	Won     int `json:"won"`
+	Lost    int `json:"lost"`
+	Voided  int `json:"voided"`
+}
+
+// SettleEvent settles all open bets for a given event based on selection results.
+// The event must have status "settled". For each open bet:
+//   - Won selection → CreditWin with payout amount
+//   - Lost selection → update bet status only (stake already deducted)
+//   - Void selection → CancelTransaction to restore stake
+func (s *SportsbookService) SettleEvent(ctx context.Context, eventID uuid.UUID) (*SettleEventResult, error) {
+	// Verify event status
+	var eventStatus string
+	err := s.pool.QueryRow(ctx,
+		`SELECT status FROM sports_events WHERE id = $1`, eventID).Scan(&eventStatus)
+	if err != nil {
+		return nil, domain.ErrNotFound("event", eventID.String())
+	}
+	if eventStatus != "settled" {
+		return nil, domain.ErrValidation("event must have status 'settled' to settle bets")
+	}
+
+	// Query open bets with their selection results
+	rows, err := s.pool.Query(ctx, `
+		SELECT b.id, b.player_id, b.transaction_id, b.stake_amount_minor,
+		       b.potential_payout_minor, b.game_round_id, sel.result
+		FROM sports_bets b
+		JOIN sports_selections sel ON sel.id = b.selection_id
+		WHERE b.event_id = $1 AND b.status = 'open'`, eventID)
+	if err != nil {
+		return nil, domain.ErrInternal("query open bets", err)
+	}
+	defer rows.Close()
+
+	type openBet struct {
+		ID            uuid.UUID
+		PlayerID      uuid.UUID
+		TransactionID *uuid.UUID
+		Stake         int64
+		Payout        int64
+		GameRoundID   string
+		Result        *string
+	}
+
+	var bets []openBet
+	for rows.Next() {
+		var b openBet
+		if err := rows.Scan(&b.ID, &b.PlayerID, &b.TransactionID, &b.Stake,
+			&b.Payout, &b.GameRoundID, &b.Result); err != nil {
+			return nil, domain.ErrInternal("scan bet", err)
+		}
+		bets = append(bets, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domain.ErrInternal("iterate bets", err)
+	}
+
+	result := &SettleEventResult{}
+
+	for _, bet := range bets {
+		if bet.Result == nil || *bet.Result == "" {
+			s.logger.Warn("skipping bet with no selection result",
+				"bet_id", bet.ID, "event_id", eventID)
+			continue
+		}
+
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return nil, domain.ErrInternal("begin settle tx", err)
+		}
+
+		switch *bet.Result {
+		case "won":
+			_, err = s.engine.ExecuteCreditWin(ctx, tx, domain.CreditWinParams{
+				PlayerID:              bet.PlayerID,
+				Amount:                bet.Payout,
+				ExternalTransactionID: fmt.Sprintf("settle_win_%s", bet.ID.String()[:8]),
+				ManufacturerID:        "sportsbook",
+				SubTransactionID:      "1",
+				GameRoundID:           bet.GameRoundID,
+				WinType:               domain.CasinoWinNormal,
+			})
+			if err != nil {
+				tx.Rollback(ctx)
+				return nil, fmt.Errorf("settle win bet %s: %w", bet.ID, err)
+			}
+			_, err = tx.Exec(ctx,
+				`UPDATE sports_bets SET status = 'won', payout_amount_minor = $2, settled_at = now() WHERE id = $1`,
+				bet.ID, bet.Payout)
+			if err != nil {
+				tx.Rollback(ctx)
+				return nil, domain.ErrInternal("update won bet", err)
+			}
+			result.Won++
+
+		case "lost":
+			_, err = tx.Exec(ctx,
+				`UPDATE sports_bets SET status = 'lost', settled_at = now() WHERE id = $1`,
+				bet.ID)
+			if err != nil {
+				tx.Rollback(ctx)
+				return nil, domain.ErrInternal("update lost bet", err)
+			}
+			result.Lost++
+
+		case "void":
+			if bet.TransactionID == nil {
+				tx.Rollback(ctx)
+				s.logger.Warn("void bet has no transaction_id", "bet_id", bet.ID)
+				continue
+			}
+			_, err = s.engine.ExecuteCancelTransaction(ctx, tx, domain.CancelTransactionParams{
+				PlayerID:              bet.PlayerID,
+				Amount:                bet.Stake,
+				ExternalTransactionID: fmt.Sprintf("settle_void_%s", bet.ID.String()[:8]),
+				ManufacturerID:        "sportsbook",
+				SubTransactionID:      "1",
+				TargetTransactionID:   *bet.TransactionID,
+			})
+			if err != nil {
+				tx.Rollback(ctx)
+				return nil, fmt.Errorf("settle void bet %s: %w", bet.ID, err)
+			}
+			_, err = tx.Exec(ctx,
+				`UPDATE sports_bets SET status = 'void', settled_at = now() WHERE id = $1`,
+				bet.ID)
+			if err != nil {
+				tx.Rollback(ctx)
+				return nil, domain.ErrInternal("update void bet", err)
+			}
+			result.Voided++
+
+		default:
+			tx.Rollback(ctx)
+			s.logger.Warn("unknown selection result", "result", *bet.Result, "bet_id", bet.ID)
+			continue
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return nil, domain.ErrInternal("commit settle tx", err)
+		}
+		result.Settled++
+	}
+
+	return result, nil
+}
+
 // ListSelections returns selections for a market.
 func (s *SportsbookService) ListSelections(ctx context.Context, db repository.DBTX, marketID uuid.UUID) ([]domain.SportsSelection, error) {
 	rows, err := db.Query(ctx,

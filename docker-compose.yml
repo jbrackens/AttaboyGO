@@ -54,6 +54,84 @@ services:
       timeout: 10s
       retries: 10
 
+  # ── Application services ─────────────────────────────
+
+  migrate:
+    image: migrate/migrate:v4.17.0
+    container_name: attaboy-go-migrate
+    volumes:
+      - ./db/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://attaboy:attaboy@postgres:5432/attaboy?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    container_name: attaboy-go-api
+    entrypoint: ["/app/api"]
+    ports:
+      - "3100:3100"
+    environment:
+      DATABASE_URL: postgres://attaboy:attaboy@postgres:5432/attaboy?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      API_PORT: 3100
+      CORS_ALLOWED_ORIGINS: "*"
+      ALLOW_INSECURE_DEFAULTS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  wallet-server:
+    build: .
+    container_name: attaboy-go-wallet
+    entrypoint: ["/app/wallet-server"]
+    ports:
+      - "4001:4001"
+    environment:
+      DATABASE_URL: postgres://attaboy:attaboy@postgres:5432/attaboy?sslmode=disable
+      WALLET_SERVER_PORT: 4001
+      ALLOW_INSECURE_DEFAULTS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  outbox-consumer:
+    build: .
+    container_name: attaboy-go-outbox
+    entrypoint: ["/app/outbox-consumer"]
+    environment:
+      DATABASE_URL: postgres://attaboy:attaboy@postgres:5432/attaboy?sslmode=disable
+      OUTBOX_POLL_INTERVAL: 2s
+      OUTBOX_BATCH_SIZE: "100"
+      ALLOW_INSECURE_DEFAULTS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:

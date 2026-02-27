@@ -4,7 +4,7 @@
 build:
 	go build -o bin/api ./cmd/api
 	go build -o bin/wallet-server ./cmd/wallet-server
-	go build -o bin/migrate ./cmd/migrate
+	go build -o bin/outbox-consumer ./cmd/outbox-consumer
 
 run: build
 	./bin/api

@@ -6,6 +6,7 @@ import (
 
 	"github.com/attaboy/platform/internal/domain"
 	"github.com/attaboy/platform/internal/handler"
+	"github.com/attaboy/platform/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,11 +15,12 @@ import (
 // SportsbookAdminHandler handles admin sportsbook management.
 type SportsbookAdminHandler struct {
 	pool *pgxpool.Pool
+	svc  *service.SportsbookService
 }
 
 // NewSportsbookAdminHandler creates a new SportsbookAdminHandler.
-func NewSportsbookAdminHandler(pool *pgxpool.Pool) *SportsbookAdminHandler {
-	return &SportsbookAdminHandler{pool: pool}
+func NewSportsbookAdminHandler(pool *pgxpool.Pool, svc *service.SportsbookService) *SportsbookAdminHandler {
+	return &SportsbookAdminHandler{pool: pool, svc: svc}
 }
 
 // CreateEvent handles POST /admin/sportsbook/events.
@@ -123,4 +125,21 @@ func (h *SportsbookAdminHandler) ListEvents(w http.ResponseWriter, r *http.Reque
 	}
 
 	handler.RespondJSON(w, http.StatusOK, events)
+}
+
+// SettleEvent handles POST /admin/sportsbook/events/{id}/settle.
+func (h *SportsbookAdminHandler) SettleEvent(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		handler.RespondError(w, domain.ErrValidation("invalid event id"))
+		return
+	}
+
+	result, err := h.svc.SettleEvent(r.Context(), id)
+	if err != nil {
+		handler.RespondError(w, err)
+		return
+	}
+
+	handler.RespondJSON(w, http.StatusOK, result)
 }

@@ -589,3 +589,197 @@ func TestBet_EmptyBody(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
+// ─── Admin Settlement Endpoint Tests (6) ───────────────────────────────────
+
+// placeBetAndSettle is a helper that places a bet, then updates the event to "settled"
+// and the selection result, returning IDs needed for the settle call.
+func placeBetAndSettle(t *testing.T, env *testutil.TestEnv, token string, playerID uuid.UUID, stake int64, selResult string) (eventID uuid.UUID, selectionID uuid.UUID) {
+	t.Helper()
+	_, eventID, marketID, selectionID := env.SeedSportsbook(250)
+
+	resp := env.AuthPOST("/sportsbook/bets", map[string]interface{}{
+		"event_id": eventID, "market_id": marketID, "selection_id": selectionID, "stake": stake,
+	}, token)
+	resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Update event status to "settled" and selection result
+	_, err := env.Pool.Exec(t.Context(),
+		`UPDATE sports_events SET status = 'settled' WHERE id = $1`, eventID)
+	require.NoError(t, err)
+	_, err = env.Pool.Exec(t.Context(),
+		`UPDATE sports_selections SET result = $2 WHERE id = $1`, selectionID, selResult)
+	require.NoError(t, err)
+
+	return eventID, selectionID
+}
+
+func TestSettleEndpoint_WinCreditsBalance(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("admsetwin@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+	adminToken := env.AdminToken("superadmin")
+
+	eventID, _ := placeBetAndSettle(t, env, token, playerID, 1000, "won")
+
+	// Balance after bet: 9000. Settle should credit payout (1000 * 250/100 = 2500).
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Settled int `json:"settled"`
+		Won     int `json:"won"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 1, result.Settled)
+	assert.Equal(t, 1, result.Won)
+
+	// Balance: 9000 + 2500 = 11500
+	testutil.AssertBalance(t, env, playerID, 11500, 0, 0)
+}
+
+func TestSettleEndpoint_LossNoCredit(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("admsetloss@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+	adminToken := env.AdminToken("superadmin")
+
+	eventID, _ := placeBetAndSettle(t, env, token, playerID, 1000, "lost")
+
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Settled int `json:"settled"`
+		Lost    int `json:"lost"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 1, result.Settled)
+	assert.Equal(t, 1, result.Lost)
+
+	// Balance unchanged after bet: 9000
+	testutil.AssertBalance(t, env, playerID, 9000, 0, 0)
+}
+
+func TestSettleEndpoint_VoidRestoresStake(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("admsetvoid@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+	adminToken := env.AdminToken("superadmin")
+
+	eventID, _ := placeBetAndSettle(t, env, token, playerID, 1000, "void")
+
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Settled int `json:"settled"`
+		Voided  int `json:"voided"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 1, result.Settled)
+	assert.Equal(t, 1, result.Voided)
+
+	// Void restores stake: 9000 + 1000 = 10000
+	testutil.AssertBalance(t, env, playerID, 10000, 0, 0)
+}
+
+func TestSettleEndpoint_RequiresSettledStatus(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("admsetnotset@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+	adminToken := env.AdminToken("superadmin")
+
+	_, eventID, marketID, selectionID := env.SeedSportsbook(250)
+	env.AuthPOST("/sportsbook/bets", map[string]interface{}{
+		"event_id": eventID, "market_id": marketID, "selection_id": selectionID, "stake": 1000,
+	}, token)
+
+	// Event is still "upcoming" — should fail
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestSettleEndpoint_NoOpenBets(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	adminToken := env.AdminToken("superadmin")
+
+	_, eventID, _, _ := env.SeedSportsbook(250)
+	// Mark event as settled but place no bets
+	_, err := env.Pool.Exec(t.Context(),
+		`UPDATE sports_events SET status = 'settled' WHERE id = $1`, eventID)
+	require.NoError(t, err)
+
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Settled int `json:"settled"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 0, result.Settled)
+}
+
+func TestSettleEndpoint_ReturnsSummary(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("admsetsummary@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 50000)
+	adminToken := env.AdminToken("superadmin")
+
+	// Place 3 bets on different selections within the same event
+	_, eventID, marketID, _ := env.SeedSportsbook(250)
+
+	// Add two more selections to the same market
+	sel2 := uuid.New()
+	sel3 := uuid.New()
+	_, err := env.Pool.Exec(t.Context(), `
+		INSERT INTO sports_selections (id, market_id, name, odds_decimal, odds_fractional, odds_american, status, sort_order)
+		VALUES ($1, $2, 'Away Win', 300, '3/1', '+300', 'active', 2),
+		       ($3, $2, 'Draw', 350, '7/2', '+350', 'active', 3)`,
+		sel2, marketID, sel3)
+	require.NoError(t, err)
+
+	// Place bets on each selection
+	for _, sel := range []uuid.UUID{sel2, sel3} {
+		resp := env.AuthPOST("/sportsbook/bets", map[string]interface{}{
+			"event_id": eventID, "market_id": marketID, "selection_id": sel, "stake": 1000,
+		}, token)
+		resp.Body.Close()
+	}
+
+	// Set results: sel2 = won, sel3 = lost
+	_, err = env.Pool.Exec(t.Context(), `UPDATE sports_selections SET result = 'won' WHERE id = $1`, sel2)
+	require.NoError(t, err)
+	_, err = env.Pool.Exec(t.Context(), `UPDATE sports_selections SET result = 'lost' WHERE id = $1`, sel3)
+	require.NoError(t, err)
+	_, err = env.Pool.Exec(t.Context(), `UPDATE sports_events SET status = 'settled' WHERE id = $1`, eventID)
+	require.NoError(t, err)
+
+	resp := env.POST("/admin/sportsbook/events/"+eventID.String()+"/settle", nil, adminToken)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Settled int `json:"settled"`
+		Won     int `json:"won"`
+		Lost    int `json:"lost"`
+		Voided  int `json:"voided"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 2, result.Settled)
+	assert.Equal(t, 1, result.Won)
+	assert.Equal(t, 1, result.Lost)
+	assert.Equal(t, 0, result.Voided)
+}

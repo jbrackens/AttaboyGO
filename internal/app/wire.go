@@ -78,7 +78,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 	// Admin handlers
 	playerAdmin := adminhandler.NewPlayerAdminHandler(pool, playerRepo, profileRepo)
 	bonusAdmin := adminhandler.NewBonusAdminHandler(pool)
-	sbAdmin := adminhandler.NewSportsbookAdminHandler(pool)
+	sbAdmin := adminhandler.NewSportsbookAdminHandler(pool, sportsbookSvc)
 	reportsAdmin := adminhandler.NewReportsHandler(pool)
 	affiliateAdmin := adminhandler.NewAffiliateAdminHandler(pool)
 	questAdmin := adminhandler.NewQuestAdminHandler(pool)
@@ -215,6 +215,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 			r.Get("/events", sbAdmin.ListEvents)
 			r.Post("/events", sbAdmin.CreateEvent)
 			r.Patch("/events/{id}/status", sbAdmin.UpdateEventStatus)
+			r.Post("/events/{id}/settle", sbAdmin.SettleEvent)
 		})
 
 		r.Route("/reports", func(r chi.Router) {

@@ -63,6 +63,9 @@ type OutboxRepository interface {
 	// FetchUnpublished returns unpublished events for the outbox poller.
 	FetchUnpublished(ctx context.Context, db DBTX, limit int) ([]domain.OutboxDraft, error)
 
+	// FetchUnpublishedRows returns unpublished events with their sequence IDs.
+	FetchUnpublishedRows(ctx context.Context, db DBTX, limit int) ([]OutboxRow, error)
+
 	// MarkPublished deletes or marks events as published.
 	MarkPublished(ctx context.Context, db DBTX, ids []int64) error
 }
