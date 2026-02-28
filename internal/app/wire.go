@@ -30,6 +30,7 @@ type RouterDeps struct {
 	CORSAllowedOrigins  string
 	DomeBaseURL         string
 	DomeAPIKey          string
+	OddsAPIKey          string
 }
 
 // NewRouter assembles the chi.Router with all routes and middleware.
@@ -58,6 +59,12 @@ func NewRouter(deps RouterDeps) chi.Router {
 	if deps.DomeBaseURL != "" && deps.DomeAPIKey != "" {
 		domeConnector := provider.NewDomeConnector(pool, deps.DomeBaseURL, deps.DomeAPIKey, logger)
 		domeConnector.StartMarketSync(context.Background())
+	}
+
+	// The Odds API — live sportsbook odds sync
+	if deps.OddsAPIKey != "" {
+		oddsConnector := provider.NewOddsAPIConnector(pool, deps.OddsAPIKey, logger)
+		oddsConnector.StartSync(context.Background())
 	}
 
 	// Services

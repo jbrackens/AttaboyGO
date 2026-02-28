@@ -47,6 +47,9 @@ type Config struct {
 	// Dome prediction feed
 	DomeBaseURL string `env:"DOME_BASE_URL"`
 	DomeAPIKey  string `env:"DOME_API_KEY"`
+
+	// The Odds API (sportsbook live odds)
+	OddsAPIKey string `env:"ODDS_API_KEY"`
 }
 
 // LoadConfig parses environment variables into a Config struct.

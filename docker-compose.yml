@@ -82,6 +82,9 @@ services:
       API_PORT: 3100
       CORS_ALLOWED_ORIGINS: "*"
       ALLOW_INSECURE_DEFAULTS: "true"
+      DOME_BASE_URL: "https://api.domeapi.io"
+      DOME_API_KEY: "0f949ca44b337367ffacd640240195e11f2f81a4"
+      ODDS_API_KEY: "ed432d12955a555dba098e54fb299f53"
     depends_on:
       postgres:
         condition: service_healthy

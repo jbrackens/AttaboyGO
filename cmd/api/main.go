@@ -80,6 +80,7 @@ func run(logger *slog.Logger) error {
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 		DomeBaseURL:         cfg.DomeBaseURL,
 		DomeAPIKey:          cfg.DomeAPIKey,
+		OddsAPIKey:          cfg.OddsAPIKey,
 	})
 
 	// Start server
