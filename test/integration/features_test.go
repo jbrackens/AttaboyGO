@@ -176,13 +176,12 @@ func TestQuests_MinScoreGate(t *testing.T) {
 		VALUES ($1, $2, 1, 'completed')`, playerID, questID)
 	require.NoError(t, err)
 
-	// Attempt to claim — min_score gating may or may not be enforced at claim time
+	// Attempt to claim — should be rejected due to min_score gate
 	resp := env.AuthPOST("/quests/"+questID.String()+"/claim", nil, token)
 	defer resp.Body.Close()
 
-	// Documents current behavior: min_score may not be enforced at claim
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest,
-		"expected 200, 404 or 400, got %d", resp.StatusCode)
+	// min_score gate enforced: player has no engagement score, quest requires 9999
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestQuests_MultipleQuestsProgress(t *testing.T) {

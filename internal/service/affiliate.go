@@ -111,21 +111,20 @@ func (s *AffiliateService) CalculateCommission(ctx context.Context, affiliateID 
 
 // TrackClick records an affiliate click.
 func (s *AffiliateService) TrackClick(ctx context.Context, btag, ipAddr, userAgent, referer string) {
-	// Find affiliate by btag (link code)
-	var linkID, affiliateID uuid.UUID
+	// Find link by btag
+	var linkID uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT al.id, al.affiliate_id FROM affiliate_links al WHERE al.btag = $1`,
-		btag).Scan(&linkID, &affiliateID)
+		`SELECT id FROM affiliate_links WHERE btag = $1`, btag).Scan(&linkID)
 	if err != nil {
 		s.logger.Warn("btag not found", "btag", btag)
 		return
 	}
 
-	// Record click asynchronously (non-blocking)
+	// Record click
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO affiliate_clicks (link_id, affiliate_id, ip_address, user_agent, referrer)
-		VALUES ($1, $2, $3, $4, $5)`,
-		linkID, affiliateID, ipAddr, userAgent, referer)
+		INSERT INTO affiliate_clicks (link_id, ip_address, user_agent, referrer_url)
+		VALUES ($1, $2, $3, $4)`,
+		linkID, ipAddr, userAgent, referer)
 	if err != nil {
 		s.logger.Error("record click", "error", err, "btag", btag)
 	}

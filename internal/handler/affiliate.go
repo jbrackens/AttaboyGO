@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/attaboy/platform/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,19 @@ func (h *AffiliateHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err := DecodeJSON(r, &input); err != nil {
 		RespondJSON(w, http.StatusBadRequest, map[string]string{
 			"code": "VALIDATION_ERROR", "message": "invalid request body",
+		})
+		return
+	}
+
+	if strings.TrimSpace(input.Email) == "" {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{
+			"code": "VALIDATION_ERROR", "message": "email is required",
+		})
+		return
+	}
+	if len(input.Password) < 8 {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{
+			"code": "VALIDATION_ERROR", "message": "password must be at least 8 characters",
 		})
 		return
 	}

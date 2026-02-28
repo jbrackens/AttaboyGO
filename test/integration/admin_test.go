@@ -934,7 +934,6 @@ func TestAdminQuests_CreateMissingName(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 	adminToken := env.AdminToken("superadmin")
 
-	// Server currently accepts quest creation without name — documents behavior
 	resp := env.AuthPOST("/admin/quests", map[string]interface{}{
 		"description":     "No name quest",
 		"type":            "standard",
@@ -944,8 +943,7 @@ func TestAdminQuests_CreateMissingName(t *testing.T) {
 	}, adminToken)
 	defer resp.Body.Close()
 
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusCreated,
-		"expected 400 or 201, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestAdminQuests_RequiresAdminToken(t *testing.T) {

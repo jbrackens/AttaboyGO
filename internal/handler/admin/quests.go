@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/attaboy/platform/internal/domain"
@@ -80,6 +81,13 @@ func (h *QuestAdminHandler) CreateQuest(w http.ResponseWriter, r *http.Request) 
 	if err := handler.DecodeJSON(r, &input); err != nil {
 		handler.RespondJSON(w, http.StatusBadRequest, map[string]string{
 			"code": "VALIDATION_ERROR", "message": "invalid request body",
+		})
+		return
+	}
+
+	if strings.TrimSpace(input.Name) == "" {
+		handler.RespondJSON(w, http.StatusBadRequest, map[string]string{
+			"code": "VALIDATION_ERROR", "message": "name is required",
 		})
 		return
 	}

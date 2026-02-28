@@ -81,16 +81,30 @@ func (h *QuestHandler) ClaimReward(w http.ResponseWriter, r *http.Request) {
 	var progressStatus string
 	var rewardAmount int
 	var rewardCurrency string
+	var minScore int
 
 	err = h.pool.QueryRow(r.Context(), `
-		SELECT pqp.quest_id, pqp.status, q.reward_amount, q.reward_currency
+		SELECT pqp.quest_id, pqp.status, q.reward_amount, q.reward_currency, q.min_score
 		FROM player_quest_progress pqp
 		JOIN quests q ON q.id = pqp.quest_id
 		WHERE pqp.player_id = $1 AND pqp.status = 'completed'
-		LIMIT 1`, playerID).Scan(&questID, &progressStatus, &rewardAmount, &rewardCurrency)
+		LIMIT 1`, playerID).Scan(&questID, &progressStatus, &rewardAmount, &rewardCurrency, &minScore)
 	if err != nil {
 		RespondError(w, domain.ErrNotFound("completed quest", playerID.String()))
 		return
+	}
+
+	// Enforce min_score gate
+	if minScore > 0 {
+		var playerScore int
+		today := time.Now().Format("2006-01-02")
+		_ = h.pool.QueryRow(r.Context(),
+			`SELECT COALESCE(score, 0) FROM player_engagement WHERE player_id = $1 AND date = $2`,
+			playerID, today).Scan(&playerScore)
+		if playerScore < minScore {
+			RespondError(w, domain.ErrValidation("engagement score too low to claim this quest"))
+			return
+		}
 	}
 
 	// Mark as claimed

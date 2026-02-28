@@ -33,9 +33,7 @@ func TestAffiliate_RegisterMissingEmail(t *testing.T) {
 	}, "")
 	defer resp.Body.Close()
 
-	// Server currently accepts registration without email — documents behavior
-	assert.True(t, resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusCreated,
-		"expected 400 or 201, got %d", resp.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestAffiliate_RegisterDuplicateEmail(t *testing.T) {
@@ -119,15 +117,12 @@ func TestAffiliate_TrackClickValidBtag(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	// Note: click recording may fail if service references non-existent columns
-	// (known issue: affiliate_id column not in affiliate_clicks table).
-	// Verify by checking if any click was recorded.
+	// Verify click row recorded in DB
 	var count int
 	env.Pool.QueryRow(t.Context(),
 		"SELECT COUNT(*) FROM affiliate_clicks ac JOIN affiliate_links al ON ac.link_id = al.id WHERE al.btag = $1",
 		"TESTBTAG1").Scan(&count)
-	// count may be 0 due to column mismatch bug in service — documents behavior
-	assert.GreaterOrEqual(t, count, 0)
+	assert.Equal(t, 1, count)
 }
 
 func TestAffiliate_TrackClickInvalidBtag(t *testing.T) {
@@ -161,12 +156,9 @@ func TestAffiliate_TrackClickRecordsIPAndUA(t *testing.T) {
 		JOIN affiliate_links al ON ac.link_id = al.id
 		WHERE al.btag = $1`, "IPBTAG1").Scan(&ipAddr, &userAgent)
 
-	if err == nil {
-		// If the click was recorded (column names match), verify fields
-		assert.NotEmpty(t, ipAddr)
-		assert.Equal(t, "TestBot/1.0", userAgent)
-	}
-	// If error, the click tracking may have a column mismatch — test documents behavior
+	require.NoError(t, err)
+	assert.NotEmpty(t, ipAddr)
+	assert.Equal(t, "TestBot/1.0", userAgent)
 }
 
 func TestAffiliate_MultipleClicks(t *testing.T) {
@@ -189,10 +181,7 @@ func TestAffiliate_MultipleClicks(t *testing.T) {
 		"SELECT COUNT(*) FROM affiliate_clicks ac JOIN affiliate_links al ON ac.link_id = al.id WHERE al.btag = $1",
 		"MULTIBTAG").Scan(&count)
 
-	// If clicks were recorded successfully, expect 2
-	if count > 0 {
-		assert.Equal(t, 2, count)
-	}
+	assert.Equal(t, 2, count)
 }
 
 // ─── Affiliate Registration Response Validation (1) ───────────────────────
