@@ -1,1 +1,184 @@
 @import "tailwindcss";
+
+@theme {
+  /* Brand - Volt Yellow */
+  --color-brand-50: #f9ffe6;
+  --color-brand-100: #f0ffbf;
+  --color-brand-200: #e3ff85;
+  --color-brand-300: #d4ff47;
+  --color-brand-400: #ccff00;
+  --color-brand-500: #b8e600;
+  --color-brand-600: #99bf00;
+  --color-brand-700: #739900;
+  --color-brand-800: #4d6600;
+  --color-brand-900: #263300;
+
+  /* Surface - Dark Charcoal */
+  --color-surface: #121212;
+  --color-surface-50: #2a2a2a;
+  --color-surface-100: #242424;
+  --color-surface-200: #1e1e1e;
+  --color-surface-300: #181818;
+  --color-surface-400: #141414;
+  --color-surface-500: #121212;
+  --color-surface-600: #0e0e0e;
+  --color-surface-700: #0a0a0a;
+  --color-surface-800: #060606;
+  --color-surface-900: #000000;
+
+  /* Electric Accents */
+  --color-electric-cyan: #00e5ff;
+  --color-electric-magenta: #ff2d55;
+  --color-electric-purple: #bf5af2;
+  --color-electric-blue: #0a84ff;
+
+  /* Text on dark */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #6b6b6b;
+
+  /* Fonts */
+  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Shadows */
+  --shadow-neu-inset: inset 2px 2px 4px rgba(0, 0, 0, 0.6), inset -2px -2px 4px rgba(255, 255, 255, 0.05);
+  --shadow-neu-raised: 4px 4px 8px rgba(0, 0, 0, 0.5), -2px -2px 6px rgba(255, 255, 255, 0.04);
+  --shadow-glow-brand: 0 0 20px rgba(204, 255, 0, 0.3);
+  --shadow-glow-cyan: 0 0 20px rgba(0, 229, 255, 0.3);
+  --shadow-glow-magenta: 0 0 20px rgba(255, 45, 85, 0.3);
+
+  /* Animations */
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.3s ease-out;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-spin-reel: spin-reel 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-count-up: count-up 1s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(204, 255, 0, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(204, 255, 0, 0.4); }
+}
+
+@keyframes spin-reel {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Base ──────────────────────────────────────────── */
+
+body {
+  @apply bg-surface text-text-primary;
+}
+
+/* ── Buttons ───────────────────────────────────────── */
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-lg bg-brand-400 px-5 py-2.5 text-sm font-semibold text-surface-900 transition-all duration-200;
+  &:hover { @apply bg-brand-300 shadow-glow-brand; }
+  &:active { @apply scale-[0.97]; }
+  &:disabled { @apply opacity-40 cursor-not-allowed hover:shadow-none hover:bg-brand-400; }
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-lg bg-surface-100 px-5 py-2.5 text-sm font-semibold text-text-primary border border-surface-50 transition-all duration-200;
+  &:hover { @apply bg-surface-50 border-brand-400/30; }
+  &:disabled { @apply opacity-40 cursor-not-allowed; }
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-lg border border-brand-400/40 bg-transparent px-5 py-2.5 text-sm font-semibold text-brand-400 transition-all duration-200;
+  &:hover { @apply bg-brand-400/10 border-brand-400; }
+  &:disabled { @apply opacity-40 cursor-not-allowed; }
+}
+
+/* ── Inputs ────────────────────────────────────────── */
+
+.input-field {
+  @apply block w-full rounded-lg border border-surface-50 bg-surface-200 px-4 py-2.5 text-sm text-text-primary placeholder-text-muted outline-none transition-all duration-200;
+  &:focus { @apply border-brand-400 ring-1 ring-brand-400/40; }
+}
+
+/* ── Cards ─────────────────────────────────────────── */
+
+.card {
+  @apply rounded-2xl border border-surface-50 bg-surface-200 p-6 shadow-neu-raised;
+}
+
+.card-glass {
+  @apply rounded-2xl border border-white/[0.08] p-6;
+  background: rgba(30, 30, 30, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.panel-inset {
+  @apply rounded-xl bg-surface-300 p-4 shadow-neu-inset;
+}
+
+/* ── Sportsbook ────────────────────────────────────── */
+
+.odds-btn {
+  @apply flex flex-col items-center justify-center rounded-lg border border-surface-50 bg-surface-200 px-4 py-2 text-sm font-mono transition-all duration-200 cursor-pointer select-none;
+  &:hover { @apply border-brand-400/40 bg-surface-100; }
+}
+
+.odds-btn--active {
+  @apply border-brand-400 bg-brand-400/15 text-brand-400 shadow-glow-brand;
+}
+
+/* ── Badges ────────────────────────────────────────── */
+
+.badge-live {
+  @apply inline-flex items-center gap-1 rounded-full bg-electric-magenta/15 px-2.5 py-0.5 text-xs font-semibold text-electric-magenta;
+  &::before {
+    content: '';
+    @apply block h-1.5 w-1.5 rounded-full bg-electric-magenta animate-pulse;
+  }
+}
+
+.badge-upcoming {
+  @apply inline-flex items-center rounded-full bg-electric-cyan/15 px-2.5 py-0.5 text-xs font-semibold text-electric-cyan;
+}
+
+.badge-settled {
+  @apply inline-flex items-center rounded-full bg-text-muted/15 px-2.5 py-0.5 text-xs font-semibold text-text-muted;
+}
+
+/* ── Utility ───────────────────────────────────────── */
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(204, 255, 0, 0.5), 0 0 40px rgba(204, 255, 0, 0.2);
+}
+
+.divider-glow {
+  @apply h-px w-full;
+  background: linear-gradient(90deg, transparent, rgba(204, 255, 0, 0.3), transparent);
+}
+
+.num {
+  @apply font-mono tabular-nums;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }

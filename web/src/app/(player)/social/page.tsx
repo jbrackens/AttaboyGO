@@ -3,38 +3,22 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { formatDate } from '@/lib/utils';
-import { LoadingSpinner } from '@/components/loading-spinner';
-import { ErrorMessage } from '@/components/error-message';
+import { formatDate } from '@/lib/format';
 
-interface Post {
-  id: string;
-  player_id: string;
-  content: string;
-  created_at: string;
-}
+interface Post { id: string; player_id: string; content: string; created_at: string; }
 
 export default function SocialPage() {
   const token = useAuthStore((s) => s.token)!;
   const playerId = useAuthStore((s) => s.playerId);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState('');
 
-  async function loadPosts() {
-    const p = await api<Post[]>('/social/posts', { token });
-    setPosts(p);
-  }
+  async function loadPosts() { setPosts(await api<Post[]>('/social/posts', { token })); }
 
-  useEffect(() => {
-    loadPosts()
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [token]);
+  useEffect(() => { loadPosts().finally(() => setLoading(false)); }, [token]);
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
@@ -42,11 +26,7 @@ export default function SocialPage() {
     setPostError('');
     setPosting(true);
     try {
-      await api('/social/posts', {
-        method: 'POST',
-        token,
-        body: { content },
-      });
+      await api('/social/posts', { method: 'POST', token, body: { content } });
       setContent('');
       await loadPosts();
     } catch (err) {
@@ -57,63 +37,53 @@ export default function SocialPage() {
   }
 
   async function handleDelete(postId: string) {
-    try {
-      await api(`/social/posts/${postId}`, { method: 'DELETE', token });
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
-    } catch {
-      // silent
-    }
+    await api(`/social/posts/${postId}`, { method: 'DELETE', token }).catch(() => {});
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
   }
 
-  if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} />;
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-surface-50 border-t-brand-400" /></div>;
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handlePost} className="rounded-lg bg-white p-5 shadow-sm">
-        <ErrorMessage message={postError} />
+    <div className="mx-auto max-w-2xl space-y-6 animate-fade-in">
+      <h1 className="font-display text-2xl font-bold">Social</h1>
+
+      {/* Compose */}
+      <form onSubmit={handlePost} className="card space-y-3">
+        {postError && <p className="text-xs text-electric-magenta">{postError}</p>}
         <textarea
           rows={3}
-          placeholder="What's on your mind?"
+          placeholder="Share a win, a tip, or just say hey..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="input-field resize-none"
         />
-        <div className="mt-2 flex justify-end">
-          <button
-            type="submit"
-            disabled={posting || !content.trim()}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
+        <div className="flex justify-end">
+          <button type="submit" disabled={posting || !content.trim()} className="btn-primary text-sm">
             {posting ? 'Posting...' : 'Post'}
           </button>
         </div>
       </form>
 
-      <div className="space-y-3">
-        {posts.length === 0 ? (
-          <p className="text-sm text-gray-400">No posts yet. Be the first!</p>
-        ) : (
-          posts.map((post) => (
-            <div key={post.id} className="rounded-lg bg-white p-5 shadow-sm">
+      {/* Feed */}
+      {posts.length === 0 ? (
+        <div className="card-glass text-center py-12"><p className="text-text-muted">No posts yet. Be the first!</p></div>
+      ) : (
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <div key={post.id} className="card">
               <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{post.content}</p>
-                  <p className="mt-2 text-xs text-gray-400">{formatDate(post.created_at)}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+                  <p className="mt-2 text-xs text-text-muted">{formatDate(post.created_at)}</p>
                 </div>
                 {post.player_id === playerId && (
-                  <button
-                    onClick={() => handleDelete(post.id)}
-                    className="ml-3 text-xs text-red-500 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
+                  <button onClick={() => handleDelete(post.id)} className="ml-3 text-xs text-electric-magenta hover:underline shrink-0">Delete</button>
                 )}
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

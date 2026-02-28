@@ -1,3 +1,5 @@
+import { clearAuth } from '@/lib/auth';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100';
 
 export class ApiError extends Error {
@@ -32,6 +34,12 @@ export async function api<T>(
   });
 
   if (!res.ok) {
+    // 401 → auto-logout
+    if (res.status === 401 && typeof window !== 'undefined') {
+      clearAuth();
+      window.location.href = '/login';
+    }
+
     let msg = res.statusText;
     try {
       const err = await res.json();

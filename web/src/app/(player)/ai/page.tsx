@@ -4,78 +4,60 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { formatDate } from '@/lib/utils';
-import { LoadingSpinner } from '@/components/loading-spinner';
-import { ErrorMessage } from '@/components/error-message';
+import { formatDate } from '@/lib/format';
 
-interface Conversation {
-  id: string;
-  title: string;
-  created_at: string;
-}
+interface Conversation { id: string; title: string; created_at: string; }
 
 export default function AIChatListPage() {
   const token = useAuthStore((s) => s.token)!;
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    api<Conversation[]>('/ai/conversations', { token })
-      .then(setConversations)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    api<Conversation[]>('/ai/conversations', { token }).then(setConversations).finally(() => setLoading(false));
   }, [token]);
 
   async function handleNew() {
     setCreating(true);
     try {
-      const conv = await api<Conversation>('/ai/conversations', {
-        method: 'POST',
-        token,
-        body: {},
-      });
+      const conv = await api<Conversation>('/ai/conversations', { method: 'POST', token, body: {} });
       router.push(`/ai/${conv.id}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create conversation');
+    } catch {
       setCreating(false);
     }
   }
 
-  if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} />;
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-surface-50 border-t-brand-400" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">AI Chat</h2>
-        <button
-          onClick={handleNew}
-          disabled={creating}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
+        <h1 className="font-display text-2xl font-bold">AI Chat</h1>
+        <button onClick={handleNew} disabled={creating} className="btn-primary text-sm">
           {creating ? 'Creating...' : 'New Conversation'}
         </button>
       </div>
 
-      <div className="space-y-2">
-        {conversations.length === 0 ? (
-          <p className="text-sm text-gray-400">No conversations yet</p>
-        ) : (
-          conversations.map((conv) => (
+      {conversations.length === 0 ? (
+        <div className="card-glass text-center py-12">
+          <p className="text-text-muted">No conversations yet. Start one!</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {conversations.map((conv) => (
             <button
               key={conv.id}
               onClick={() => router.push(`/ai/${conv.id}`)}
-              className="block w-full rounded-lg bg-white p-4 text-left shadow-sm hover:shadow-md transition-shadow"
+              className="card w-full text-left hover:border-brand-400/20 transition-colors"
             >
-              <p className="font-medium text-gray-900">{conv.title || 'Untitled'}</p>
-              <p className="text-xs text-gray-400">{formatDate(conv.created_at)}</p>
+              <p className="font-medium">{conv.title || 'Untitled'}</p>
+              <p className="text-xs text-text-muted mt-1">{formatDate(conv.created_at)}</p>
             </button>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

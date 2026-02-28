@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
-import { Sidebar } from '@/components/sidebar';
-import { BalanceBar } from '@/components/balance-bar';
+import { Header } from '@/components/header';
+import { Footer } from '@/components/footer';
 
 export default function PlayerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -22,12 +22,10 @@ export default function PlayerLayout({ children }: { children: React.ReactNode }
   if (!ready) return null;
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <BalanceBar />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
+    <div className="flex min-h-screen flex-col">
+      <Header />
+      <main className="flex-1 px-6 py-6">{children}</main>
+      <Footer />
     </div>
   );
 }
