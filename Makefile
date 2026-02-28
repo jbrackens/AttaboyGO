@@ -1,4 +1,4 @@
-.PHONY: build run test vet lint migrate-up migrate-down migrate-version generate docker-up docker-down clean
+.PHONY: build run test vet lint migrate-up migrate-down migrate-version generate docker-up docker-down clean web-dev web-build
 
 # ── Build ──────────────────────────────────────────────
 build:
@@ -53,6 +53,13 @@ docker-down:
 docker-reset:
 	docker compose down -v
 	docker compose up -d
+
+# ── Web Frontend ─────────────────────────────────────
+web-dev:
+	cd web && npm run dev
+
+web-build:
+	cd web && npm run build
 
 # ── Cleanup ───────────────────────────────────────────
 clean:

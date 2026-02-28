@@ -132,6 +132,18 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  web:
+    build: ./web
+    container_name: attaboy-go-web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3100
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
