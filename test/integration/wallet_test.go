@@ -222,6 +222,127 @@ func TestWithdrawal_ZeroAmount(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+// ─── Deposit Validation Tests (4) ──────────────────────────────────────────
+
+func TestDeposit_RequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.POST("/payments/deposit", map[string]interface{}{
+		"amount": 5000, "currency": "EUR",
+		"success_url": "http://example.com/ok", "cancel_url": "http://example.com/no",
+	}, "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestDeposit_ZeroAmountRejected(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("depzero@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/payments/deposit", map[string]interface{}{
+		"amount": 0, "currency": "EUR",
+		"success_url": "http://example.com/ok", "cancel_url": "http://example.com/no",
+	}, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestDeposit_NegativeAmountRejected(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("depneg@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/payments/deposit", map[string]interface{}{
+		"amount": -1000, "currency": "EUR",
+		"success_url": "http://example.com/ok", "cancel_url": "http://example.com/no",
+	}, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestDeposit_EmptyBodyRejected(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("depempty@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/payments/deposit", nil, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// ─── Withdrawal Extended Tests (4) ────────────────────────────────────────
+
+func TestWithdrawal_MultipleWithdrawals(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("wdmulti@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+
+	r1 := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 3000}, token)
+	r1.Body.Close()
+	r2 := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 2000}, token)
+	r2.Body.Close()
+
+	// Balance should be 10000 - 3000 - 2000 = 5000, reserved = 5000
+	testutil.AssertBalance(t, env, playerID, 5000, 0, 5000)
+}
+
+func TestWithdrawal_PaymentHistoryShowsBoth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("wdhistboth@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+
+	r1 := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 3000}, token)
+	r1.Body.Close()
+	r2 := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 2000}, token)
+	r2.Body.Close()
+
+	resp := env.AuthGET("/payments/history", token)
+	defer resp.Body.Close()
+
+	var payments []struct {
+		Type   string `json:"type"`
+		Status string `json:"status"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payments))
+	assert.GreaterOrEqual(t, len(payments), 2)
+}
+
+func TestWithdrawal_TransactionTypeCorrect(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("wdtype@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 10000)
+
+	resp := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 5000}, token)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify withdrawal type in payments table
+	var payType string
+	err := env.Pool.QueryRow(t.Context(),
+		"SELECT type FROM payments WHERE player_id = $1 ORDER BY created_at DESC LIMIT 1",
+		playerID).Scan(&payType)
+	require.NoError(t, err)
+	assert.Equal(t, "withdrawal", payType)
+}
+
+func TestWithdrawal_ExactBalanceThenAnother(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("wdexactfail@test.com", "securepass123", "EUR")
+	env.DirectDeposit(playerID, 5000)
+
+	// Withdraw all
+	r1 := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 5000}, token)
+	r1.Body.Close()
+	assert.Equal(t, http.StatusOK, r1.StatusCode)
+
+	// Second withdrawal should fail — no balance left
+	resp := env.AuthPOST("/payments/withdraw", map[string]int64{"amount": 1000}, token)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 // ─── Transaction History Tests (7) ─────────────────────────────────────────
 
 func TestTransactions_EmptyList(t *testing.T) {
