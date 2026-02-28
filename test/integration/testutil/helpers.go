@@ -16,6 +16,7 @@ import (
 
 	"github.com/attaboy/platform/internal/auth"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // RegisterPlayer creates a new player and returns the auth token and player ID.
@@ -509,6 +510,38 @@ func (env *TestEnv) SeedPlugin(name string) string {
 		env.t.Fatalf("SeedPlugin: %v", err)
 	}
 	return pluginID
+}
+
+// RegisterAdmin inserts an admin user directly into the DB and returns a JWT.
+func (env *TestEnv) RegisterAdmin(email, password, role string) string {
+	env.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	adminID := uuid.New()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		env.t.Fatalf("RegisterAdmin: hash: %v", err)
+	}
+
+	_, err = env.Pool.Exec(ctx, `
+		INSERT INTO admin_users (id, email, password_hash, display_name, role)
+		VALUES ($1, $2, $3, 'Test Admin', $4)`,
+		adminID, email, string(hash), role)
+	if err != nil {
+		env.t.Fatalf("RegisterAdmin: insert: %v", err)
+	}
+
+	token, err := env.JWTMgr.GenerateToken(auth.RealmAdmin, adminID, email, role, "")
+	if err != nil {
+		env.t.Fatalf("RegisterAdmin: token: %v", err)
+	}
+	return token
+}
+
+// FakeUUID returns a random UUID string for test placeholders.
+func FakeUUID() string {
+	return uuid.New().String()
 }
 
 // StripeWebhookSignature generates a valid Stripe webhook signature for testing.

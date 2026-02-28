@@ -6,6 +6,7 @@ import (
 
 	"github.com/attaboy/platform/internal/auth"
 	"github.com/attaboy/platform/internal/domain"
+	"github.com/attaboy/platform/internal/guard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
@@ -63,22 +64,31 @@ func (s *AffiliateService) Register(ctx context.Context, input AffiliateRegister
 type AffiliateLoginInput struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	IP       string `json:"-"`
 }
 
 // Login authenticates an affiliate.
 func (s *AffiliateService) Login(ctx context.Context, input AffiliateLoginInput) (*AuthResult, error) {
+	if err := guard.CheckLocked(ctx, s.pool, input.Email, "affiliate"); err != nil {
+		return nil, err
+	}
+
 	var affID uuid.UUID
 	var email, passwordHash, status string
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, email, password_hash, status FROM affiliates WHERE email = $1`,
 		input.Email).Scan(&affID, &email, &passwordHash, &status)
 	if err != nil {
+		guard.RecordAttempt(ctx, s.pool, input.Email, "affiliate", input.IP, false)
 		return nil, domain.ErrUnauthorized("invalid credentials")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)); err != nil {
+		guard.RecordAttempt(ctx, s.pool, input.Email, "affiliate", input.IP, false)
 		return nil, domain.ErrUnauthorized("invalid credentials")
 	}
+
+	guard.RecordAttempt(ctx, s.pool, input.Email, "affiliate", input.IP, true)
 
 	token, err := s.jwtMgr.GenerateToken(auth.RealmAffiliate, affID, email, "", status)
 	if err != nil {

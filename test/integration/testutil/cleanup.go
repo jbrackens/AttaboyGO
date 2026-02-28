@@ -90,6 +90,10 @@ func (env *TestEnv) CleanAll() {
 
 		// Dome
 		"dome_feed_state",
+
+		// Security
+		"login_attempts",
+		"password_reset_tokens",
 	}
 
 	for _, table := range tables {

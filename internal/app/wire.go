@@ -108,6 +108,8 @@ func NewRouter(deps RouterDeps) chi.Router {
 		r.Use(handler.RateLimitMiddleware(authRateLimiter, handler.ClientIP))
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
+		r.Post("/password-reset/request", authHandler.RequestPasswordReset)
+		r.Post("/password-reset/confirm", authHandler.ConfirmPasswordReset)
 	})
 
 	// Affiliate auth routes (no player auth)
@@ -195,49 +197,43 @@ func NewRouter(deps RouterDeps) chi.Router {
 		})
 	})
 
-	// Admin-authenticated routes
+	// Admin-authenticated routes — 3 permission tiers via RequireRole
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(auth.AuthenticateAdmin(jwtMgr))
 
-		r.Route("/players", func(r chi.Router) {
-			r.Get("/", playerAdmin.SearchPlayers)
-			r.Get("/{id}", playerAdmin.GetPlayerDetail)
-			r.Patch("/{id}/status", playerAdmin.UpdatePlayerStatus)
+		// Read tier — all admin roles (viewer, admin, superadmin)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.AllAdminRoles()...))
+			r.Get("/players", playerAdmin.SearchPlayers)
+			r.Get("/players/{id}", playerAdmin.GetPlayerDetail)
+			r.Get("/reports/dashboard", reportsAdmin.GetDashboardStats)
+			r.Get("/reports/transactions", reportsAdmin.GetTransactionReport)
+			r.Get("/affiliates", affiliateAdmin.ListAffiliates)
+			r.Get("/quests", questAdmin.ListQuests)
+			r.Get("/bonuses", bonusAdmin.ListBonuses)
+			r.Get("/sportsbook/events", sbAdmin.ListEvents)
+			r.Get("/moderation/posts", moderationAdmin.ListFlaggedPosts)
+			r.Get("/moderation/dispatches", moderationAdmin.ListPluginDispatches)
 		})
 
-		r.Route("/bonuses", func(r chi.Router) {
-			r.Get("/", bonusAdmin.ListBonuses)
-			r.Post("/", bonusAdmin.CreateBonus)
-			r.Patch("/{id}/status", bonusAdmin.UpdateBonusStatus)
+		// Write tier — admin + superadmin
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.WriteRoles()...))
+			r.Patch("/players/{id}/status", playerAdmin.UpdatePlayerStatus)
+			r.Post("/bonuses", bonusAdmin.CreateBonus)
+			r.Patch("/bonuses/{id}/status", bonusAdmin.UpdateBonusStatus)
+			r.Post("/sportsbook/events", sbAdmin.CreateEvent)
+			r.Patch("/sportsbook/events/{id}/status", sbAdmin.UpdateEventStatus)
+			r.Patch("/affiliates/{id}/status", affiliateAdmin.UpdateAffiliateStatus)
+			r.Post("/quests", questAdmin.CreateQuest)
+			r.Patch("/quests/{id}/toggle", questAdmin.ToggleQuest)
+			r.Delete("/moderation/posts/{id}", moderationAdmin.DeletePost)
 		})
 
-		r.Route("/sportsbook", func(r chi.Router) {
-			r.Get("/events", sbAdmin.ListEvents)
-			r.Post("/events", sbAdmin.CreateEvent)
-			r.Patch("/events/{id}/status", sbAdmin.UpdateEventStatus)
-			r.Post("/events/{id}/settle", sbAdmin.SettleEvent)
-		})
-
-		r.Route("/reports", func(r chi.Router) {
-			r.Get("/dashboard", reportsAdmin.GetDashboardStats)
-			r.Get("/transactions", reportsAdmin.GetTransactionReport)
-		})
-
-		r.Route("/affiliates", func(r chi.Router) {
-			r.Get("/", affiliateAdmin.ListAffiliates)
-			r.Patch("/{id}/status", affiliateAdmin.UpdateAffiliateStatus)
-		})
-
-		r.Route("/quests", func(r chi.Router) {
-			r.Get("/", questAdmin.ListQuests)
-			r.Post("/", questAdmin.CreateQuest)
-			r.Patch("/{id}/toggle", questAdmin.ToggleQuest)
-		})
-
-		r.Route("/moderation", func(r chi.Router) {
-			r.Get("/posts", moderationAdmin.ListFlaggedPosts)
-			r.Delete("/posts/{id}", moderationAdmin.DeletePost)
-			r.Get("/dispatches", moderationAdmin.ListPluginDispatches)
+		// Settlement tier — superadmin only
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.RoleSuperAdmin))
+			r.Post("/sportsbook/events/{id}/settle", sbAdmin.SettleEvent)
 		})
 	})
 

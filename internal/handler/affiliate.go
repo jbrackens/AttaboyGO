@@ -60,6 +60,8 @@ func (h *AffiliateHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	input.IP = ClientIP(r)
+
 	result, err := h.affSvc.Login(r.Context(), input)
 	if err != nil {
 		RespondError(w, err)

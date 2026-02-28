@@ -47,6 +47,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	input.IP = ClientIP(r)
+
 	result, err := h.authSvc.Login(r.Context(), input)
 	if err != nil {
 		RespondError(w, err)
@@ -54,4 +56,46 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, result)
+}
+
+// RequestPasswordReset handles POST /auth/password-reset/request.
+func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email string `json:"email"`
+	}
+	if err := DecodeJSON(r, &input); err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{
+			"code": "VALIDATION_ERROR", "message": "invalid request body",
+		})
+		return
+	}
+
+	result, err := h.authSvc.RequestPasswordReset(r.Context(), input.Email)
+	if err != nil {
+		RespondError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, result)
+}
+
+// ConfirmPasswordReset handles POST /auth/password-reset/confirm.
+func (h *AuthHandler) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := DecodeJSON(r, &input); err != nil {
+		RespondJSON(w, http.StatusBadRequest, map[string]string{
+			"code": "VALIDATION_ERROR", "message": "invalid request body",
+		})
+		return
+	}
+
+	if err := h.authSvc.ConfirmPasswordReset(r.Context(), input.Token, input.NewPassword); err != nil {
+		RespondError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]string{"status": "password_reset"})
 }

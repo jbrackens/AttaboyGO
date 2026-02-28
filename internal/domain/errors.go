@@ -49,6 +49,10 @@ func ErrIdempotent(existingTxID string) *AppError {
 	return &AppError{Code: "IDEMPOTENT", Message: fmt.Sprintf("transaction already exists: %s", existingTxID), Status: 200}
 }
 
+func ErrAccountLocked(msg string) *AppError {
+	return &AppError{Code: "ACCOUNT_LOCKED", Message: msg, Status: 429}
+}
+
 func ErrInternal(msg string, cause error) *AppError {
 	return &AppError{Code: "INTERNAL_ERROR", Message: msg, Status: 500, Cause: cause}
 }

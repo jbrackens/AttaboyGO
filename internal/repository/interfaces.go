@@ -77,6 +77,9 @@ type AuthUserRepository interface {
 
 	// Create inserts a new auth user.
 	Create(ctx context.Context, db DBTX, user *domain.AuthUser) error
+
+	// UpdatePasswordHash updates the password hash for the given email.
+	UpdatePasswordHash(ctx context.Context, db DBTX, email, hash string) error
 }
 
 // ProfileRepository provides access to player_profiles.

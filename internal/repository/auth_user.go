@@ -40,3 +40,17 @@ func (r *PgAuthUserRepository) Create(ctx context.Context, db DBTX, user *domain
 		user.ID, user.Email, user.PasswordHash)
 	return err
 }
+
+// UpdatePasswordHash updates the password hash for the given email.
+func (r *PgAuthUserRepository) UpdatePasswordHash(ctx context.Context, db DBTX, email, hash string) error {
+	tag, err := db.Exec(ctx,
+		`UPDATE auth_users SET password_hash = $1, updated_at = now() WHERE email = $2`,
+		hash, email)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound("user", email)
+	}
+	return nil
+}
