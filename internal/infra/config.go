@@ -43,6 +43,10 @@ type Config struct {
 	RandomOrgAPIKey     string `env:"RANDOM_ORG_API_KEY"`
 	StripeSecretKey     string `env:"STRIPE_SECRET_KEY"`
 	StripeWebhookSecret string `env:"STRIPE_WEBHOOK_SECRET"`
+
+	// Dome prediction feed
+	DomeBaseURL string `env:"DOME_BASE_URL"`
+	DomeAPIKey  string `env:"DOME_API_KEY"`
 }
 
 // LoadConfig parses environment variables into a Config struct.

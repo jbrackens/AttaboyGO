@@ -9,8 +9,28 @@ import { EventCard } from '@/components/sportsbook/event-card';
 import { Betslip } from '@/components/sportsbook/betslip';
 
 interface Sport { id: string; name: string; }
-interface Event { id: string; name: string; starts_at: string; status: string; }
-interface Bet { id: string; event_id: string; selection_name: string; stake: number; odds: number; status: string; created_at: string; }
+interface Event {
+  id: string;
+  sport_id: string;
+  home_team: string;
+  away_team: string;
+  league?: string;
+  start_time: string;
+  status: string;
+  score_home: number;
+  score_away: number;
+}
+interface Bet {
+  id: string;
+  event_id: string;
+  selection_id: string;
+  stake_amount_minor: number;
+  odds_at_placement: number;
+  potential_payout_minor: number;
+  status: string;
+  placed_at: string;
+  game_round_id: string;
+}
 
 export default function SportsbookPage() {
   const token = useAuthStore((s) => s.token)!;
@@ -27,13 +47,13 @@ export default function SportsbookPage() {
       api<Sport[]>('/sportsbook/sports', { token }),
       api<Bet[]>('/sportsbook/bets/me', { token }).catch(() => []),
     ])
-      .then(([s, b]) => { setSports(s); setBets(b || []); if (s.length > 0) setActiveSport(s[0].id); })
+      .then(([s, b]) => { const sp = s || []; setSports(sp); setBets(b || []); if (sp.length > 0) setActiveSport(sp[0].id); })
       .finally(() => setLoading(false));
   }, [token]);
 
   useEffect(() => {
     if (!activeSport) return;
-    api<Event[]>(`/sports/${activeSport}/events`, { token }).then(setEvents).catch(() => setEvents([]));
+    api<Event[]>(`/sportsbook/sports/${activeSport}/events`, { token }).then((e) => setEvents(e || [])).catch(() => setEvents([]));
   }, [activeSport, token]);
 
   const filteredEvents = statusFilter === 'all' ? events : events.filter((e) => e.status === statusFilter);
@@ -100,11 +120,11 @@ export default function SportsbookPage() {
               <div key={bet.id} className="card">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">{bet.selection_name}</p>
-                    <p className="text-xs text-text-muted">Odds: <span className="num">{bet.odds}</span> | {formatDate(bet.created_at)}</p>
+                    <p className="text-sm font-medium">Bet {bet.game_round_id}</p>
+                    <p className="text-xs text-text-muted">Odds: <span className="num">{(bet.odds_at_placement / 100).toFixed(2)}</span> | {formatDate(bet.placed_at)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold num">${formatCents(bet.stake)}</p>
+                    <p className="text-sm font-semibold num">{formatCents(bet.stake_amount_minor)}</p>
                     <span className={`text-xs font-medium ${bet.status === 'won' ? 'text-brand-400' : bet.status === 'lost' ? 'text-electric-magenta' : 'text-electric-cyan'}`}>
                       {bet.status}
                     </span>

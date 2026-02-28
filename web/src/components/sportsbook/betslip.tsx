@@ -18,7 +18,12 @@ export function Betslip() {
     await api('/sportsbook/bets', {
       method: 'POST',
       token,
-      body: { selection_id: sel.selectionId, stake: Math.round(sel.stake * 100) },
+      body: {
+        event_id: sel.eventId,
+        market_id: sel.marketId,
+        selection_id: sel.selectionId,
+        stake: Math.round(sel.stake * 100),
+      },
     });
   }
 

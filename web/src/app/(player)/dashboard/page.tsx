@@ -21,9 +21,9 @@ export default function DashboardPage() {
     Promise.all([
       api<Player>('/players/me', { token }),
       api<Engagement>('/engagement/me', { token }).catch(() => null),
-      api<Transaction[]>('/wallet/transactions?limit=5', { token }).catch(() => []),
+      api<{ transactions: Transaction[] }>('/wallet/transactions?limit=5', { token }).catch(() => ({ transactions: [] })),
     ])
-      .then(([p, e, t]) => { setPlayer(p); setEngagement(e); setTransactions(t || []); })
+      .then(([p, e, t]) => { setPlayer(p); setEngagement(e); setTransactions(t?.transactions || []); })
       .finally(() => setLoading(false));
   }, [token]);
 

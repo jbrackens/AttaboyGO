@@ -21,7 +21,7 @@ export default function AIConversationPage() {
 
   useEffect(() => {
     api<Message[]>(`/ai/conversations/${conversationId}/messages`, { token })
-      .then(setMessages)
+      .then((m) => setMessages(m || []))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [conversationId, token]);

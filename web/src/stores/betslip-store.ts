@@ -5,10 +5,11 @@ import { create } from 'zustand';
 export interface BetSelection {
   selectionId: string;
   eventId: string;
+  marketId: string;
   eventName: string;
   marketName: string;
   selectionName: string;
-  odds: number;
+  odds: number; // decimal, e.g. 1.75
   stake: number;
 }
 

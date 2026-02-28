@@ -16,7 +16,7 @@ export default function AIChatListPage() {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    api<Conversation[]>('/ai/conversations', { token }).then(setConversations).finally(() => setLoading(false));
+    api<Conversation[]>('/ai/conversations', { token }).then((c) => setConversations(c || [])).finally(() => setLoading(false));
   }, [token]);
 
   async function handleNew() {

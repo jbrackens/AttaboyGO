@@ -15,7 +15,7 @@ export default function LobbyPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   useEffect(() => {
-    api<Game[]>('/slots/games', { token }).then(setGames).catch(() => {}).finally(() => setLoading(false));
+    api<Game[]>('/slots/games', { token }).then((g) => setGames(g || [])).catch(() => {}).finally(() => setLoading(false));
   }, [token]);
 
   const categories = ['all', ...Array.from(new Set(games.map((g) => g.category || g.provider)))];

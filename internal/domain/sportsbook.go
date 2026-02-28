@@ -21,7 +21,7 @@ type Sport struct {
 type SportsEvent struct {
 	ID        uuid.UUID `json:"id"`
 	SportID   uuid.UUID `json:"sport_id"`
-	League    string    `json:"league,omitempty"`
+	League    *string   `json:"league,omitempty"`
 	HomeTeam  string    `json:"home_team"`
 	AwayTeam  string    `json:"away_team"`
 	StartTime time.Time `json:"start_time"`
@@ -38,7 +38,7 @@ type SportsMarket struct {
 	Name       string    `json:"name"`
 	Type       string    `json:"type"`
 	Status     string    `json:"status"`
-	Specifiers string    `json:"specifiers,omitempty"`
+	Specifiers *string   `json:"specifiers,omitempty"`
 	SortOrder  int       `json:"sort_order"`
 	CreatedAt  time.Time `json:"created_at"`
 }
@@ -49,8 +49,8 @@ type SportsSelection struct {
 	MarketID        uuid.UUID `json:"market_id"`
 	Name            string    `json:"name"`
 	OddsDecimal     int       `json:"odds_decimal"`
-	OddsFractional  string    `json:"odds_fractional,omitempty"`
-	OddsAmerican    string    `json:"odds_american,omitempty"`
+	OddsFractional  *string   `json:"odds_fractional,omitempty"`
+	OddsAmerican    *string   `json:"odds_american,omitempty"`
 	Status          string    `json:"status"`
 	Result          *string   `json:"result,omitempty"`
 	SortOrder       int       `json:"sort_order"`

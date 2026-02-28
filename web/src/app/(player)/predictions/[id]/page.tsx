@@ -6,7 +6,8 @@ import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatDate } from '@/lib/format';
 
-interface Market { id: string; question: string; outcome_a: string; outcome_b: string; status: string; created_at: string; }
+interface Outcome { id: string; label: string; probability?: number; }
+interface Market { id: string; title: string; description?: string; category: string; status: string; close_at: string; created_at: string; outcomes?: Outcome[]; }
 
 export default function PredictionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,7 +16,7 @@ export default function PredictionDetailPage() {
 
   const [market, setMarket] = useState<Market | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedOutcome, setSelectedOutcome] = useState('');
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
   const [stakeAmount, setStakeAmount] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -28,7 +29,7 @@ export default function PredictionDetailPage() {
         // Fallback: try fetching all markets and finding this one
         api<Market[]>('/predictions/markets', { token })
           .then((markets) => {
-            const m = markets.find((m) => m.id === id);
+            const m = (markets || []).find((m) => m.id === id);
             if (m) setMarket(m);
           });
       })
@@ -37,13 +38,14 @@ export default function PredictionDetailPage() {
 
   async function handleStake(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOutcome) { setError('Select an outcome'); return; }
+    if (!selectedOutcomeId) { setError('Select an outcome'); return; }
     setError('');
     setSuccess('');
     setSubmitting(true);
     try {
-      await api(`/markets/${id}/stake`, { method: 'POST', token, body: { outcome: selectedOutcome, amount: Math.round(parseFloat(stakeAmount) * 100) } });
-      setSuccess(`Staked $${stakeAmount} on "${selectedOutcome}"`);
+      await api(`/predictions/markets/${id}/stake`, { method: 'POST', token, body: { outcome_id: selectedOutcomeId, amount: Math.round(parseFloat(stakeAmount) * 100) } });
+      const selectedLabel = (market?.outcomes || []).find((o) => o.id === selectedOutcomeId)?.label || selectedOutcomeId;
+      setSuccess(`Staked $${stakeAmount} on "${selectedLabel}"`);
       setStakeAmount('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Stake failed');
@@ -57,36 +59,39 @@ export default function PredictionDetailPage() {
   if (loading) return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-surface-50 border-t-brand-400" /></div>;
   if (!market) return <p className="text-center text-text-muted py-12">Market not found</p>;
 
+  const outcomes = market.outcomes || [];
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 animate-fade-in">
       <button onClick={() => router.back()} className="text-sm text-brand-400 hover:underline">&larr; Back to predictions</button>
 
       <div className="card">
-        <h1 className="font-display text-xl font-bold mb-2">{market.question}</h1>
-        <p className="text-xs text-text-muted">{market.status} | {formatDate(market.created_at)}</p>
+        <h1 className="font-display text-xl font-bold mb-2">{market.title}</h1>
+        {market.description && <p className="text-sm text-text-secondary mb-2">{market.description}</p>}
+        <p className="text-xs text-text-muted">{market.status} | Closes {formatDate(market.close_at)}</p>
       </div>
 
       {/* Outcome selection */}
       <div className="grid grid-cols-2 gap-4">
-        <button
-          onClick={() => setSelectedOutcome(market.outcome_a)}
-          className={`card text-center transition-all ${selectedOutcome === market.outcome_a ? 'border-electric-purple shadow-glow-brand' : 'hover:border-electric-purple/30'}`}
-        >
-          <span className="font-display text-lg font-semibold">{market.outcome_a}</span>
-        </button>
-        <button
-          onClick={() => setSelectedOutcome(market.outcome_b)}
-          className={`card text-center transition-all ${selectedOutcome === market.outcome_b ? 'border-electric-purple shadow-glow-brand' : 'hover:border-electric-purple/30'}`}
-        >
-          <span className="font-display text-lg font-semibold">{market.outcome_b}</span>
-        </button>
+        {outcomes.map((outcome) => (
+          <button
+            key={outcome.id}
+            onClick={() => setSelectedOutcomeId(outcome.id)}
+            className={`card text-center transition-all ${selectedOutcomeId === outcome.id ? 'border-electric-purple shadow-glow-brand' : 'hover:border-electric-purple/30'}`}
+          >
+            <span className="font-display text-lg font-semibold">{outcome.label}</span>
+            {outcome.probability != null && (
+              <p className="text-xs text-text-muted mt-1 num">{outcome.probability}%</p>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Stake form */}
-      {selectedOutcome && (
+      {selectedOutcomeId && (
         <form onSubmit={handleStake} className="card space-y-4">
           <h3 className="text-sm font-semibold text-text-muted">
-            Staking on: <span className="text-electric-purple">{selectedOutcome}</span>
+            Staking on: <span className="text-electric-purple">{outcomes.find((o) => o.id === selectedOutcomeId)?.label}</span>
           </h3>
           {error && <p className="text-xs text-electric-magenta">{error}</p>}
           {success && <p className="text-xs text-brand-400">{success}</p>}

@@ -16,7 +16,7 @@ export default function SocialPage() {
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState('');
 
-  async function loadPosts() { setPosts(await api<Post[]>('/social/posts', { token })); }
+  async function loadPosts() { const p = await api<Post[]>('/social/posts', { token }); setPosts(p || []); }
 
   useEffect(() => { loadPosts().finally(() => setLoading(false)); }, [token]);
 

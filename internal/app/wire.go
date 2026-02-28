@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -27,6 +28,8 @@ type RouterDeps struct {
 	RandomOrgAPIKey     string
 	SlotopolBaseURL     string
 	CORSAllowedOrigins  string
+	DomeBaseURL         string
+	DomeAPIKey          string
 }
 
 // NewRouter assembles the chi.Router with all routes and middleware.
@@ -50,6 +53,12 @@ func NewRouter(deps RouterDeps) chi.Router {
 	stripeProvider := provider.NewStripeProvider(deps.StripeSecretKey, deps.StripeWebhookSecret)
 	rngClient := provider.NewRandomOrgClient(deps.RandomOrgAPIKey, logger)
 	slotopolClient := provider.NewSlotopolClient(deps.SlotopolBaseURL, logger)
+
+	// Dome prediction feed — start sync if configured
+	if deps.DomeBaseURL != "" && deps.DomeAPIKey != "" {
+		domeConnector := provider.NewDomeConnector(pool, deps.DomeBaseURL, deps.DomeAPIKey, logger)
+		domeConnector.StartMarketSync(context.Background())
+	}
 
 	// Services
 	authSvc := service.NewAuthService(pool, authUserRepo, playerRepo, profileRepo, jwtMgr)

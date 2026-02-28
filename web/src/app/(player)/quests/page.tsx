@@ -3,8 +3,20 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
+import { formatCents } from '@/lib/format';
 
-interface Quest { id: string; name: string; description: string; reward_cents: number; min_score: number; status: string; }
+interface Quest {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  target_progress: number;
+  reward_amount: number;
+  reward_currency: string;
+  min_score: number;
+  progress: number;
+  status: string;
+}
 interface Engagement { score: number; level: string; }
 
 export default function QuestsPage() {
@@ -17,10 +29,10 @@ export default function QuestsPage() {
 
   useEffect(() => {
     Promise.all([
-      api<Quest[]>('/quests', { token }),
+      api<Quest[]>('/quests/', { token }),
       api<Engagement>('/engagement/me', { token }).catch(() => null),
     ])
-      .then(([q, e]) => { setQuests(q); setEngagement(e); })
+      .then(([q, e]) => { setQuests(q || []); setEngagement(e); })
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -66,8 +78,8 @@ export default function QuestsPage() {
       ) : (
         <div className="space-y-4">
           {quests.map((quest) => {
-            const canClaim = quest.status !== 'claimed' && score >= quest.min_score;
-            const progress = quest.min_score > 0 ? Math.min(100, (score / quest.min_score) * 100) : 100;
+            const canClaim = quest.status !== 'claimed' && quest.progress >= quest.target_progress && score >= quest.min_score;
+            const progress = quest.target_progress > 0 ? Math.min(100, (quest.progress / quest.target_progress) * 100) : 0;
 
             return (
               <div key={quest.id} className="card">
@@ -76,7 +88,8 @@ export default function QuestsPage() {
                     <p className="font-display text-lg font-semibold">{quest.name}</p>
                     <p className="mt-1 text-sm text-text-secondary">{quest.description}</p>
                     <p className="mt-2 text-xs text-text-muted">
-                      Reward: <span className="text-brand-400 num">${(quest.reward_cents / 100).toFixed(2)}</span> | Min score: <span className="num">{quest.min_score}</span>
+                      Reward: <span className="text-brand-400 num">{formatCents(quest.reward_amount)}</span>
+                      {quest.min_score > 0 && <> | Min score: <span className="num">{quest.min_score}</span></>}
                     </p>
                   </div>
                   {quest.status === 'claimed' ? (
@@ -92,12 +105,12 @@ export default function QuestsPage() {
                   )}
                 </div>
 
-                {quest.status !== 'claimed' && quest.min_score > 0 && (
+                {quest.status !== 'claimed' && (
                   <div className="mt-4">
                     <div className="h-2 rounded-full bg-surface-300 overflow-hidden">
                       <div className="h-2 rounded-full bg-brand-400 transition-all" style={{ width: `${progress}%` }} />
                     </div>
-                    <p className="mt-1 text-xs text-text-muted num">{score} / {quest.min_score}</p>
+                    <p className="mt-1 text-xs text-text-muted num">{quest.progress} / {quest.target_progress}</p>
                   </div>
                 )}
               </div>

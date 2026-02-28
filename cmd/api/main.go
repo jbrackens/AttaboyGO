@@ -78,6 +78,8 @@ func run(logger *slog.Logger) error {
 		RandomOrgAPIKey:     cfg.RandomOrgAPIKey,
 		SlotopolBaseURL:     "http://localhost:4002",
 		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
+		DomeBaseURL:         cfg.DomeBaseURL,
+		DomeAPIKey:          cfg.DomeAPIKey,
 	})
 
 	// Start server

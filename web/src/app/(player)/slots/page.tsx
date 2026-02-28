@@ -20,7 +20,7 @@ export default function SlotsLobbyPage() {
   const [providerFilter, setProviderFilter] = useState('all');
 
   useEffect(() => {
-    api<Game[]>('/slots/games', { token }).then(setGames).finally(() => setLoading(false));
+    api<Game[]>('/slots/games', { token }).then((g) => setGames(g || [])).finally(() => setLoading(false));
   }, [token]);
 
   const providers = ['all', ...Array.from(new Set(games.map((g) => g.provider)))];

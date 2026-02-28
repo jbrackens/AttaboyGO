@@ -16,8 +16,8 @@ export default function HistoryPage() {
 
   useEffect(() => {
     setLoading(true);
-    api<Transaction[]>(`/wallet/transactions?limit=${limit}&offset=${page * limit}`, { token })
-      .then(setTransactions)
+    api<{ transactions: Transaction[] }>(`/wallet/transactions?limit=${limit}&offset=${page * limit}`, { token })
+      .then((res) => setTransactions(res?.transactions || []))
       .catch(() => setTransactions([]))
       .finally(() => setLoading(false));
   }, [token, page]);

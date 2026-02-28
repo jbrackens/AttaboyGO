@@ -95,8 +95,8 @@ func (c *DomeConnector) syncMarkets(ctx context.Context) error {
 		outcomesJSON, _ := json.Marshal(m.Outcomes)
 
 		_, err := c.pool.Exec(ctx, `
-			INSERT INTO prediction_markets (title, description, category, status, dome_platform, dome_market_slug, outcomes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO prediction_markets (title, description, category, status, dome_platform, dome_market_slug, outcomes, created_by)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT id FROM admin_users LIMIT 1))
 			ON CONFLICT (dome_platform, dome_market_slug) WHERE dome_market_slug IS NOT NULL
 			DO UPDATE SET status = $4, outcomes = $7, updated_at = now()`,
 			m.Title, m.Description, m.Category, m.Status, m.Platform, m.Slug, outcomesJSON)

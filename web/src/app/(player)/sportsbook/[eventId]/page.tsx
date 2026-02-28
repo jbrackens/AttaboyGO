@@ -8,8 +8,16 @@ import { useBetslipStore } from '@/stores/betslip-store';
 import { MarketGroup } from '@/components/sportsbook/market-group';
 import { Betslip } from '@/components/sportsbook/betslip';
 
+interface Event {
+  id: string;
+  home_team: string;
+  away_team: string;
+  league?: string;
+  start_time: string;
+  status: string;
+}
 interface Market { id: string; name: string; status: string; }
-interface Selection { id: string; name: string; odds: number; }
+interface Selection { id: string; name: string; odds_decimal: number; }
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -17,35 +25,40 @@ export default function EventDetailPage() {
   const token = useAuthStore((s) => s.token)!;
   const { toggleSelection, hasSelection } = useBetslipStore();
 
+  const [event, setEvent] = useState<Event | null>(null);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [selections, setSelections] = useState<Record<string, Selection[]>>({});
   const [loading, setLoading] = useState(true);
   const [activeSelId, setActiveSelId] = useState<string | null>(null);
 
   useEffect(() => {
-    api<Market[]>(`/events/${eventId}/markets`, { token })
+    api<Market[]>(`/sportsbook/events/${eventId}/markets`, { token })
       .then(async (mkts) => {
-        setMarkets(mkts);
+        const mktList = mkts || [];
+        setMarkets(mktList);
         const selMap: Record<string, Selection[]> = {};
         await Promise.all(
-          mkts.map(async (m) => {
-            const sels = await api<Selection[]>(`/markets/${m.id}/selections`, { token }).catch(() => []);
-            selMap[m.id] = sels || [];
+          mktList.map(async (m) => {
+            const sels = await api<Selection[]>(`/sportsbook/markets/${m.id}/selections`, { token }).catch(() => []);
+            selMap[m.id] = Array.isArray(sels) ? sels : [];
           }),
         );
         setSelections(selMap);
       })
+      .catch(() => setMarkets([]))
       .finally(() => setLoading(false));
   }, [eventId, token]);
 
   function handleSelectSelection(market: Market, sel: Selection) {
+    const odds = sel.odds_decimal / 100; // Convert from integer (175) to decimal (1.75)
     toggleSelection({
       selectionId: sel.id,
       eventId: eventId,
-      eventName: `Event ${eventId}`,
+      marketId: market.id,
+      eventName: event ? `${event.home_team} vs ${event.away_team}` : `Event ${eventId}`,
       marketName: market.name,
       selectionName: sel.name,
-      odds: sel.odds,
+      odds,
     });
     setActiveSelId(hasSelection(sel.id) ? null : sel.id);
   }
@@ -71,9 +84,16 @@ export default function EventDetailPage() {
                 key={market.id}
                 name={market.name}
                 status={market.status}
-                selections={selections[market.id] || []}
+                selections={(selections[market.id] || []).map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  odds: s.odds_decimal / 100,
+                }))}
                 activeSelectionId={activeSelId}
-                onSelectSelection={(sel) => handleSelectSelection(market, sel)}
+                onSelectSelection={(sel) => {
+                  const origSel = (selections[market.id] || []).find((s) => s.id === sel.id);
+                  if (origSel) handleSelectSelection(market, origSel);
+                }}
               />
             ))
           )}

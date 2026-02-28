@@ -23,7 +23,10 @@ export default function WalletPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   async function loadBalance() { setBalance(await api<Balance>('/wallet/balance', { token })); }
-  async function loadTransactions() { setTransactions(await api<Transaction[]>('/wallet/transactions?limit=10', { token })); }
+  async function loadTransactions() {
+    const res = await api<{ transactions: Transaction[] }>('/wallet/transactions?limit=10', { token });
+    setTransactions(res?.transactions || []);
+  }
 
   useEffect(() => {
     Promise.all([loadBalance(), loadTransactions()]).finally(() => setLoading(false));
