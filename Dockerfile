@@ -10,9 +10,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /api ./cmd/api
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /wallet-server ./cmd/wallet-server
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /outbox-consumer ./cmd/outbox-consumer
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /wallet-server ./cmd/wallet-server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /outbox-consumer ./cmd/outbox-consumer
 
 # Stage 2: Runtime
 FROM alpine:3.20
