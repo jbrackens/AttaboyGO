@@ -2,22 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/auth-store';
+import { useAuthStore, useHasMounted } from '@/lib/auth-store';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 
 export default function PlayerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
+  const mounted = useHasMounted();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (!mounted) return;
     if (!token) {
       router.replace('/login');
     } else {
       setReady(true);
     }
-  }, [token, router]);
+  }, [mounted, token, router]);
 
   if (!ready) return null;
 

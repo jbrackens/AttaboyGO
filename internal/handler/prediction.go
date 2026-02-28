@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -21,18 +22,28 @@ func NewPredictionHandler(pool *pgxpool.Pool) *PredictionHandler {
 }
 
 type predictionMarketResponse struct {
-	ID         uuid.UUID   `json:"id"`
-	Title      string      `json:"title"`
-	Category   string      `json:"category"`
-	Status     string      `json:"status"`
-	CloseAt    *time.Time  `json:"close_at,omitempty"`
-	CreatedAt  time.Time   `json:"created_at"`
+	ID           uuid.UUID        `json:"id"`
+	Title        string           `json:"title"`
+	Description  *string          `json:"description,omitempty"`
+	Category     string           `json:"category"`
+	Status       string           `json:"status"`
+	CloseAt      *time.Time       `json:"close_at,omitempty"`
+	Outcomes     json.RawMessage  `json:"outcomes"`
+	DomePlatform *string          `json:"source,omitempty"`
+	DomeMeta     json.RawMessage  `json:"metadata,omitempty"`
+	Tags         json.RawMessage  `json:"tags,omitempty"`
+	CreatedAt    time.Time        `json:"created_at"`
 }
 
 // ListMarkets handles GET /predictions/markets.
 func (h *PredictionHandler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT id, title, category, status, close_at, created_at
+		SELECT id, title, description, category, status, close_at,
+		       COALESCE(outcomes, '[]'::jsonb),
+		       dome_platform,
+		       COALESCE(dome_metadata, '{}'::jsonb),
+		       COALESCE(tags, '[]'::jsonb),
+		       created_at
 		FROM prediction_markets
 		WHERE status IN ('open', 'closed')
 		ORDER BY created_at DESC LIMIT 50`)
@@ -45,7 +56,8 @@ func (h *PredictionHandler) ListMarkets(w http.ResponseWriter, r *http.Request) 
 	var markets []predictionMarketResponse
 	for rows.Next() {
 		var m predictionMarketResponse
-		if err := rows.Scan(&m.ID, &m.Title, &m.Category, &m.Status, &m.CloseAt, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Title, &m.Description, &m.Category, &m.Status, &m.CloseAt,
+			&m.Outcomes, &m.DomePlatform, &m.DomeMeta, &m.Tags, &m.CreatedAt); err != nil {
 			RespondError(w, domain.ErrInternal("scan prediction market", err))
 			return
 		}
@@ -65,9 +77,15 @@ func (h *PredictionHandler) GetMarket(w http.ResponseWriter, r *http.Request) {
 
 	var m predictionMarketResponse
 	err = h.pool.QueryRow(r.Context(), `
-		SELECT id, title, category, status, close_at, created_at
+		SELECT id, title, description, category, status, close_at,
+		       COALESCE(outcomes, '[]'::jsonb),
+		       dome_platform,
+		       COALESCE(dome_metadata, '{}'::jsonb),
+		       COALESCE(tags, '[]'::jsonb),
+		       created_at
 		FROM prediction_markets WHERE id = $1`, id).
-		Scan(&m.ID, &m.Title, &m.Category, &m.Status, &m.CloseAt, &m.CreatedAt)
+		Scan(&m.ID, &m.Title, &m.Description, &m.Category, &m.Status, &m.CloseAt,
+			&m.Outcomes, &m.DomePlatform, &m.DomeMeta, &m.Tags, &m.CreatedAt)
 	if err != nil {
 		RespondError(w, domain.ErrNotFound("prediction market", id.String()))
 		return

@@ -6,9 +6,20 @@ import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatCents, formatDate } from '@/lib/format';
 
-interface Outcome { id: string; label: string; probability?: number; }
-interface Market { id: string; title: string; status: string; category: string; close_at: string; created_at: string; outcomes?: Outcome[]; }
-interface Position { id: string; market_id: string; outcome_id: string; outcome_label?: string; amount: number; created_at: string; }
+interface Outcome { id: string; label: string; odds?: number; probability?: number; }
+interface MarketMeta { image?: string; volume_total?: number; end_time?: number; }
+interface Market {
+  id: string; title: string; description?: string; status: string; category: string;
+  close_at: string; created_at: string; outcomes?: Outcome[]; source?: string;
+  metadata?: MarketMeta; tags?: string[];
+}
+interface Position { id: string; market_id: string; market_title: string; outcome_id: string; stake_amount: number; status: string; placed_at: string; }
+
+function formatVolume(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
+}
 
 export default function PredictionsPage() {
   const token = useAuthStore((s) => s.token)!;
@@ -69,10 +80,10 @@ export default function PredictionsPage() {
       {tab === 'markets' && (
         <div className="space-y-4">
           {/* Category filter */}
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto pb-1">
             {categories.map((c) => (
               <button key={c} onClick={() => setCategoryFilter(c)} className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${categoryFilter === c ? 'bg-electric-purple text-white' : 'bg-surface-200 text-text-muted border border-surface-50'}`}>
-                {c === 'all' ? 'All' : c}
+                {c === 'all' ? 'All' : c.charAt(0).toUpperCase() + c.slice(1)}
               </button>
             ))}
           </div>
@@ -82,35 +93,66 @@ export default function PredictionsPage() {
           ) : (
             filteredMarkets.map((market) => {
               const outcomes = market.outcomes || [];
+              const volume = market.metadata?.volume_total;
+              const image = market.metadata?.image;
+
               return (
                 <div key={market.id} className="card">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <Link href={`/predictions/${market.id}`} className="font-medium hover:text-brand-400 transition-colors">{market.title}</Link>
-                      <p className="text-xs text-text-muted mt-1">{market.status} | Closes {formatDate(market.close_at)}</p>
+                  <div className="flex items-start gap-4 mb-3">
+                    {/* Thumbnail */}
+                    {image && (
+                      <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-surface-200">
+                        <img src={image} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/predictions/${market.id}`} className="font-medium hover:text-brand-400 transition-colors line-clamp-2">{market.title}</Link>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-text-muted">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${market.status === 'open' ? 'bg-brand-400/15 text-brand-400' : 'bg-surface-200 text-text-muted'}`}>
+                          {market.status}
+                        </span>
+                        <span>{market.category}</span>
+                        {market.source && (
+                          <span className="rounded bg-electric-cyan/10 text-electric-cyan px-1.5 py-0.5 text-[10px] font-medium">{market.source}</span>
+                        )}
+                        {volume != null && volume > 0 && (
+                          <span className="num">{formatVolume(volume)} vol</span>
+                        )}
+                        {market.close_at && <span>Closes {formatDate(market.close_at)}</span>}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Outcome buttons */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {outcomes.map((outcome) => (
-                      <button
-                        key={outcome.id}
-                        onClick={() => { setStakeMarket(market.id); setStakeOutcomeId(outcome.id); setStakeError(''); }}
-                        className={`rounded-lg border px-4 py-3 text-sm font-medium text-left transition-all ${
-                          stakeMarket === market.id && stakeOutcomeId === outcome.id
-                            ? 'border-electric-purple bg-electric-purple/15 text-electric-purple'
-                            : 'border-surface-50 text-text-secondary hover:border-electric-purple/30'
-                        }`}
-                      >
-                        <span>{outcome.label}</span>
-                        {outcome.probability != null && (
-                          <span className="ml-2 text-xs text-text-muted num">{outcome.probability}%</span>
-                        )}
-                      </button>
-                    ))}
+                  {/* Outcome buttons with probability bars */}
+                  <div className="space-y-2">
+                    {outcomes.map((outcome) => {
+                      const prob = outcome.odds ?? outcome.probability ?? 0;
+                      return (
+                        <button
+                          key={outcome.id}
+                          onClick={() => { setStakeMarket(market.id); setStakeOutcomeId(outcome.id); setStakeError(''); }}
+                          className={`relative w-full rounded-lg border px-4 py-3 text-sm font-medium text-left transition-all overflow-hidden ${
+                            stakeMarket === market.id && stakeOutcomeId === outcome.id
+                              ? 'border-electric-purple bg-electric-purple/15 text-electric-purple'
+                              : 'border-surface-50 text-text-secondary hover:border-electric-purple/30'
+                          }`}
+                        >
+                          {/* Probability fill bar */}
+                          <div
+                            className="absolute inset-y-0 left-0 bg-brand-400/8 transition-all"
+                            style={{ width: `${Math.min(prob, 100)}%` }}
+                          />
+                          <div className="relative flex items-center justify-between">
+                            <span>{outcome.label}</span>
+                            <span className="num text-xs font-semibold">{prob.toFixed(1)}%</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
 
+                  {/* Stake form */}
                   {stakeMarket === market.id && stakeOutcomeId && (
                     <form onSubmit={handleStake} className="mt-3 space-y-2">
                       {stakeError && <p className="text-xs text-electric-magenta">{stakeError}</p>}
@@ -135,10 +177,10 @@ export default function PredictionsPage() {
             positions.map((pos) => (
               <div key={pos.id} className="card flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">{pos.outcome_label || pos.outcome_id}</p>
-                  <p className="text-xs text-text-muted">{formatDate(pos.created_at)}</p>
+                  <p className="text-sm font-medium">{pos.market_title}</p>
+                  <p className="text-xs text-text-muted">{pos.outcome_id} &middot; {formatDate(pos.placed_at)}</p>
                 </div>
-                <span className="text-sm font-semibold text-electric-purple num">{formatCents(pos.amount)}</span>
+                <span className="text-sm font-semibold text-electric-purple num">${formatCents(pos.stake_amount)}</span>
               </div>
             ))
           )}

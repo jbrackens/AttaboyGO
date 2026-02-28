@@ -2,18 +2,19 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/auth-store';
+import { useAuthStore, useHasMounted } from '@/lib/auth-store';
 import Link from 'next/link';
 
 export default function HomePage() {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
+  const mounted = useHasMounted();
 
   useEffect(() => {
-    if (token) router.replace('/dashboard');
-  }, [token, router]);
+    if (mounted && token) router.replace('/dashboard');
+  }, [mounted, token, router]);
 
-  if (token) return null;
+  if (mounted && token) return null;
 
   return (
     <div className="min-h-screen flex flex-col">

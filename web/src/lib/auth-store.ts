@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useEffect, useState } from 'react';
 
 interface Player {
   id: string;
@@ -33,7 +34,6 @@ export const useAuthStore = create<AuthState>()(
       setPlayer: (player) => set({ player }),
       logout: () => set({ token: null, playerId: null, email: null, player: null }),
       hydrate: () => {
-        // Zustand persist auto-hydrates; this is a no-op hook for manual trigger
         const state = get();
         if (state.token && !state.player && state.playerId) {
           // Player data will be fetched by pages that need it
@@ -43,3 +43,10 @@ export const useAuthStore = create<AuthState>()(
     { name: 'attaboy-auth' },
   ),
 );
+
+/** Hook that returns true only after the component has mounted on the client. */
+export function useHasMounted(): boolean {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
