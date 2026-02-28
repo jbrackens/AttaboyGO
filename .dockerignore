@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+bin/
+wallet-server
+*.md
+LICENSE
+openapi.yaml
+test/
