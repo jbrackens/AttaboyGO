@@ -18,12 +18,13 @@ import (
 )
 
 const (
-	TestJWTSecret = "integration-test-secret"
-	TestDBHost    = "localhost"
-	TestDBPort    = 5435
-	TestDBUser    = "attaboy"
-	TestDBPass    = "attaboy"
-	TestDBName    = "attaboy_test"
+	TestJWTSecret          = "integration-test-secret"
+	TestStripeWebhookSecret = "whsec_test_integration_secret"
+	TestDBHost             = "localhost"
+	TestDBPort             = 5435
+	TestDBUser             = "attaboy"
+	TestDBPass             = "attaboy"
+	TestDBName             = "attaboy_test"
 )
 
 // TestEnv holds all resources for an integration test.
@@ -184,7 +185,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		JWTMgr:              jwtMgr,
 		Logger:              logger,
 		StripeSecretKey:     "",
-		StripeWebhookSecret: "",
+		StripeWebhookSecret: TestStripeWebhookSecret,
 		RandomOrgAPIKey:     "",
 		SlotopolBaseURL:     "http://localhost:4002",
 		CORSAllowedOrigins:  "*",

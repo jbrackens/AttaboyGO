@@ -1128,3 +1128,288 @@ func TestAffiliate_Login(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
 	assert.NotEmpty(t, result.Token)
 }
+
+// ─── Player Profile Tests (4) ───────────────────────────────────────────────
+
+func TestPlayerProfile_GetMe(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("getme@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/players/me", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var profile struct {
+		PlayerID uuid.UUID `json:"player_id"`
+		Currency string    `json:"currency"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&profile))
+	assert.Equal(t, playerID, profile.PlayerID)
+	assert.Equal(t, "EUR", profile.Currency)
+}
+
+func TestPlayerProfile_GetMeRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.GET("/players/me")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestPlayerProfile_GetMeBalanceAfterDeposit(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, playerID := env.RegisterPlayer("getmebal@test.com", "securepass123", "EUR")
+
+	env.DirectDeposit(playerID, 5000)
+
+	resp := env.AuthGET("/players/me", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var profile struct {
+		Balance struct {
+			Balance int64 `json:"balance"`
+		} `json:"balance"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&profile))
+	assert.Equal(t, int64(5000), profile.Balance.Balance)
+}
+
+func TestPlayerProfile_PlayerIsolation(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token1, playerID1 := env.RegisterPlayer("profile1@test.com", "securepass123", "EUR")
+	_, _ = env.RegisterPlayer("profile2@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/players/me", token1)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var profile struct {
+		PlayerID uuid.UUID `json:"player_id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&profile))
+	assert.Equal(t, playerID1, profile.PlayerID)
+}
+
+// ─── RNG Extended Tests (3) ─────────────────────────────────────────────────
+
+func TestRNG_SuccessfulGeneration(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("rnggen@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/rng/random", map[string]interface{}{
+		"count": 5,
+		"min":   1,
+		"max":   100,
+	}, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Numbers []int `json:"numbers"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Len(t, result.Numbers, 5)
+
+	for _, n := range result.Numbers {
+		assert.GreaterOrEqual(t, n, 1)
+		assert.LessOrEqual(t, n, 100)
+	}
+}
+
+func TestRNG_DefaultCountOne(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("rngdefault@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/rng/random", map[string]interface{}{
+		"min": 1,
+		"max": 10,
+	}, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var result struct {
+		Numbers []int `json:"numbers"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Len(t, result.Numbers, 1)
+}
+
+func TestRNG_CountExceedsMax(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("rngmax@test.com", "securepass123", "EUR")
+
+	// count > 100 should be clamped or rejected
+	resp := env.AuthPOST("/rng/random", map[string]interface{}{
+		"count": 200,
+		"min":   1,
+		"max":   10,
+	}, token)
+	defer resp.Body.Close()
+
+	// Should either clamp to 100 (200 OK) or reject (400)
+	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest,
+		"expected 200 or 400, got %d", resp.StatusCode)
+}
+
+// ─── Slots Extended Tests (2) ───────────────────────────────────────────────
+
+func TestSlots_SpinEmptyBody(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("slotbody@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/slots/spin", nil, token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestSlots_SpinMissingGameID(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("slotgame@test.com", "securepass123", "EUR")
+
+	resp := env.AuthPOST("/slots/spin", map[string]interface{}{
+		"bet":   100,
+		"lines": 20,
+	}, token)
+	defer resp.Body.Close()
+
+	// Should fail — either validation or provider error
+	assert.True(t, resp.StatusCode >= 400, "expected error, got %d", resp.StatusCode)
+}
+
+// ─── Prediction Extended Tests (3) ──────────────────────────────────────────
+
+func TestPredictions_GetMarketNotFound(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("prednotfound@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/predictions/markets/"+uuid.New().String(), token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestPredictions_GetMarketInvalidUUID(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("predinvalid@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/predictions/markets/not-a-uuid", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPredictions_GetMarketDetails(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("preddetails@test.com", "securepass123", "EUR")
+
+	marketID := env.SeedPredictionMarket("Test Market Details")
+
+	resp := env.AuthGET("/predictions/markets/"+marketID.String(), token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var market struct {
+		ID    uuid.UUID `json:"id"`
+		Title string    `json:"title"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&market))
+	assert.Equal(t, marketID, market.ID)
+	assert.Equal(t, "Test Market Details", market.Title)
+}
+
+// ─── Social Extended Tests (2) ──────────────────────────────────────────────
+
+func TestSocial_ListPostsEmpty(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("socialempty@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/social/posts", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestSocial_ListPostsRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.GET("/social/posts")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+// ─── Video Extended Tests (2) ───────────────────────────────────────────────
+
+func TestVideo_StartSessionRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.POST("/video/sessions", map[string]interface{}{
+		"url": "https://youtube.com/watch?v=test123",
+	}, "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestVideo_ListSessionsEmpty(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("videoempty@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/video/sessions", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// ─── Quest Edge Cases (2) ───────────────────────────────────────────────────
+
+func TestQuests_ListActiveEmpty(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+	token, _ := env.RegisterPlayer("questempty@test.com", "securepass123", "EUR")
+
+	resp := env.AuthGET("/quests", token)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestQuests_ListActiveRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.GET("/quests")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+// ─── Engagement Extended Tests (2) ──────────────────────────────────────────
+
+func TestEngagement_SignalRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.POST("/engagement/signal", map[string]interface{}{
+		"type":  "video",
+		"value": 10,
+	}, "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestEngagement_GetScoreRequiresAuth(t *testing.T) {
+	env := testutil.NewTestEnv(t)
+
+	resp := env.GET("/engagement/score")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}

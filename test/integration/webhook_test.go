@@ -27,13 +27,14 @@ func TestStripeWebhook_MissingSignatureHeader(t *testing.T) {
 func TestStripeWebhook_EmptyBody(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 
+	sig := testutil.StripeWebhookSignature([]byte{})
 	resp := env.RawPOST("/webhooks/stripe", []byte{}, map[string]string{
-		"Content-Type":    "application/json",
-		"Stripe-Signature": "t=1234567890,v1=abc123",
+		"Content-Type":     "application/json",
+		"Stripe-Signature": sig,
 	})
 	defer resp.Body.Close()
 
-	// Empty body should fail signature verification
+	// Empty body passes sig verification but fails event parsing
 	assert.True(t, resp.StatusCode >= 400, "expected 4xx error, got %d", resp.StatusCode)
 }
 
@@ -42,7 +43,7 @@ func TestStripeWebhook_InvalidSignature(t *testing.T) {
 
 	payload := []byte(`{"type":"checkout.session.completed","data":{"object":{"id":"cs_test"}}}`)
 	resp := env.RawPOST("/webhooks/stripe", payload, map[string]string{
-		"Content-Type":    "application/json",
+		"Content-Type":     "application/json",
 		"Stripe-Signature": "t=1234567890,v1=invalid_signature_here",
 	})
 	defer resp.Body.Close()
@@ -54,19 +55,18 @@ func TestStripeWebhook_InvalidSignature(t *testing.T) {
 func TestStripeWebhook_NoAuthRequired(t *testing.T) {
 	env := testutil.NewTestEnv(t)
 
-	// Webhook endpoint does not require JWT auth — uses Stripe signature instead.
-	// Without a configured webhook secret, the handler returns 401 (UNAUTHORIZED)
-	// for all requests. This documents that the route is accessible without JWT.
-	payload := []byte(`{"type":"checkout.session.completed"}`)
+	// Webhook endpoint uses Stripe signature auth, not JWT.
+	// A valid signature but unknown event type should still return a non-401 error.
+	payload := []byte(`{"type":"unknown.event.type","data":{}}`)
+	sig := testutil.StripeWebhookSignature(payload)
 	resp := env.RawPOST("/webhooks/stripe", payload, map[string]string{
-		"Content-Type":    "application/json",
-		"Stripe-Signature": "t=9999999999,v1=fakesig",
+		"Content-Type":     "application/json",
+		"Stripe-Signature": sig,
 	})
 	defer resp.Body.Close()
 
-	// Without Stripe secret configured, returns 401 (webhook auth, not JWT auth)
-	// This confirms the endpoint is reachable and processes the request
-	assert.True(t, resp.StatusCode >= 400, "expected error status, got %d", resp.StatusCode)
+	// Route is accessible without JWT — signature auth only
+	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestStripeWebhook_ContentTypeRawBody(t *testing.T) {
@@ -75,7 +75,7 @@ func TestStripeWebhook_ContentTypeRawBody(t *testing.T) {
 	// Stripe sends application/json but handler reads raw body for sig verification
 	payload := []byte(`{"id":"evt_test","type":"checkout.session.completed","data":{}}`)
 	resp := env.RawPOST("/webhooks/stripe", payload, map[string]string{
-		"Content-Type":    "application/json",
+		"Content-Type":     "application/json",
 		"Stripe-Signature": "t=1234567890,v1=badhash",
 	})
 	defer resp.Body.Close()

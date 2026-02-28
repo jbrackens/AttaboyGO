@@ -5,9 +5,13 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/attaboy/platform/internal/auth"
@@ -505,4 +509,14 @@ func (env *TestEnv) SeedPlugin(name string) string {
 		env.t.Fatalf("SeedPlugin: %v", err)
 	}
 	return pluginID
+}
+
+// StripeWebhookSignature generates a valid Stripe webhook signature for testing.
+func StripeWebhookSignature(payload []byte) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	signedPayload := ts + "." + string(payload)
+	mac := hmac.New(sha256.New, []byte(TestStripeWebhookSecret))
+	mac.Write([]byte(signedPayload))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("t=%s,v1=%s", ts, sig)
 }

@@ -1,4 +1,4 @@
-.PHONY: build run test lint migrate-up migrate-down migrate-version generate docker-up docker-down clean
+.PHONY: build run test vet lint migrate-up migrate-down migrate-version generate docker-up docker-down clean
 
 # ── Build ──────────────────────────────────────────────
 build:
@@ -18,6 +18,13 @@ test-v:
 
 test-integration:
 	go test ./... -tags=integration -count=1
+
+# ── Code Quality ──────────────────────────────────────
+vet:
+	go vet ./...
+
+lint: vet
+	@echo "go vet passed"
 
 # ── Database Migrations ───────────────────────────────
 migrate-up:
