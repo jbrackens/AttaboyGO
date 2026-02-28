@@ -392,6 +392,104 @@ func (env *TestEnv) SeedPredictionMarket(title string) uuid.UUID {
 	return marketID
 }
 
+// RegisterAffiliate creates a new affiliate and returns the auth token and affiliate ID.
+func (env *TestEnv) RegisterAffiliate(email, password, firstName, lastName string) (token string, affiliateID uuid.UUID) {
+	env.t.Helper()
+	body := map[string]string{
+		"email":      email,
+		"password":   password,
+		"first_name": firstName,
+		"last_name":  lastName,
+	}
+
+	resp := env.POST("/affiliates/register", body, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		env.t.Fatalf("RegisterAffiliate: expected 201, got %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Token       string    `json:"token"`
+		AffiliateID uuid.UUID `json:"player_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		env.t.Fatalf("RegisterAffiliate: decode: %v", err)
+	}
+	return result.Token, result.AffiliateID
+}
+
+// LoginAffiliate authenticates an existing affiliate and returns the auth token.
+func (env *TestEnv) LoginAffiliate(email, password string) string {
+	env.t.Helper()
+	resp := env.POST("/affiliates/login", map[string]string{
+		"email":    email,
+		"password": password,
+	}, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		env.t.Fatalf("LoginAffiliate: expected 200, got %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		env.t.Fatalf("LoginAffiliate: decode: %v", err)
+	}
+	return result.Token
+}
+
+// SeedAffiliateLink inserts an affiliate link for the given affiliate and returns the btag.
+func (env *TestEnv) SeedAffiliateLink(affiliateID uuid.UUID, btag string) {
+	env.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := env.Pool.Exec(ctx, `
+		INSERT INTO affiliate_links (affiliate_id, btag, target_url, active)
+		VALUES ($1, $2, 'https://example.com', true)`,
+		affiliateID, btag)
+	if err != nil {
+		env.t.Fatalf("SeedAffiliateLink: %v", err)
+	}
+}
+
+// RawPOST performs a POST request with raw bytes and custom headers.
+func (env *TestEnv) RawPOST(path string, body []byte, headers map[string]string) *http.Response {
+	env.t.Helper()
+	req, err := http.NewRequest("POST", env.Server.URL+path, bytes.NewReader(body))
+	if err != nil {
+		env.t.Fatalf("RawPOST %s: new request: %v", path, err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		env.t.Fatalf("RawPOST %s: %v", path, err)
+	}
+	return resp
+}
+
+// GETWithHeaders performs a GET request with custom headers.
+func (env *TestEnv) GETWithHeaders(path string, headers map[string]string) *http.Response {
+	env.t.Helper()
+	req, err := http.NewRequest("GET", env.Server.URL+path, nil)
+	if err != nil {
+		env.t.Fatalf("GETWithHeaders %s: new request: %v", path, err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		env.t.Fatalf("GETWithHeaders %s: %v", path, err)
+	}
+	return resp
+}
+
 // SeedPlugin inserts a plugin and returns its plugin_id.
 func (env *TestEnv) SeedPlugin(name string) string {
 	env.t.Helper()
