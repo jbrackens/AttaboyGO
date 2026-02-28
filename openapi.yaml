@@ -1,0 +1,1532 @@
+openapi: 3.1.0
+info:
+  title: Attaboy Platform API
+  description: |
+    Unified iGaming platform API — PAM, wallet/ledger, sportsbook, casino,
+    prediction markets, gamification, affiliates, and innovation layer.
+    Go backend (chi v5, pgx v5, slog structured logging).
+  version: 1.0.0
+  contact:
+    name: Platform Engineering
+
+servers:
+  - url: http://127.0.0.1:3100
+    description: Local development
+
+tags:
+  - name: Health
+    description: Service health and readiness
+  - name: Auth
+    description: Player registration, login, password reset
+  - name: Player
+    description: Player profile
+  - name: Wallet
+    description: Balance and transaction history
+  - name: Payments
+    description: Deposits and withdrawals via Stripe
+  - name: Webhooks
+    description: External provider webhooks (Stripe)
+  - name: Sportsbook
+    description: Sports, events, markets, bets
+  - name: Quests
+    description: Gamification quests and rewards
+  - name: Engagement
+    description: Engagement scoring and signal recording
+  - name: Predictions
+    description: Prediction markets and staking
+  - name: AI
+    description: AI assistant conversations
+  - name: Video
+    description: Video session tracking
+  - name: Social
+    description: Social feed posts
+  - name: Plugins
+    description: Plugin dispatch runtime
+  - name: RNG
+    description: Random number generation and provably fair
+  - name: Slots
+    description: Slot games via Slotopol
+  - name: Affiliates
+    description: Affiliate registration, login, click tracking
+  - name: "Admin: Players"
+    description: Admin player management
+  - name: "Admin: Bonuses"
+    description: Admin bonus management
+  - name: "Admin: Sportsbook"
+    description: Admin sportsbook and settlement
+  - name: "Admin: Reports"
+    description: Admin dashboard and reports
+  - name: "Admin: Affiliates"
+    description: Admin affiliate management
+  - name: "Admin: Quests"
+    description: Admin quest management
+  - name: "Admin: Moderation"
+    description: Admin content moderation
+
+security: []
+
+paths:
+  # --- Health ---
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns service health with database connectivity status.
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # --- Webhooks ---
+  /webhooks/stripe:
+    post:
+      tags: [Webhooks]
+      summary: Stripe webhook handler
+      description: Receives Stripe events (checkout.session.completed). Signature verified via Stripe-Signature header.
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Webhook processed
+        "400":
+          description: Invalid signature or payload
+
+  # --- Auth ---
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new player
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Player registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Player login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "429":
+          $ref: "#/components/responses/AccountLockedError"
+
+  /auth/password-reset/request:
+    post:
+      tags: [Auth]
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Reset token generated (token returned — in production, sent via email)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetResult"
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Auth]
+      summary: Confirm password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password reset confirmed
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # --- Affiliates (Public) ---
+  /affiliates/register:
+    post:
+      tags: [Affiliates]
+      summary: Register a new affiliate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffiliateRegisterInput"
+      responses:
+        "201":
+          description: Affiliate registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+
+  /affiliates/login:
+    post:
+      tags: [Affiliates]
+      summary: Affiliate login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+
+  /track/{btag}:
+    get:
+      tags: [Affiliates]
+      summary: Track affiliate click
+      description: Public endpoint that records an affiliate click and redirects.
+      parameters:
+        - name: btag
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Click recorded
+
+  # --- Player ---
+  /players/me:
+    get:
+      tags: [Player]
+      summary: Get current player profile
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Player profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerProfile"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  # --- Wallet ---
+  /wallet/balance:
+    get:
+      tags: [Wallet]
+      summary: Get player balance
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Current balance (3-column model)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balances"
+
+  /wallet/transactions:
+    get:
+      tags: [Wallet]
+      summary: List player transactions
+      description: Cursor-based pagination using keyset (created_at, id).
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+
+  # --- Payments ---
+  /payments/deposit:
+    post:
+      tags: [Payments]
+      summary: Initiate a deposit
+      description: Creates a Stripe Checkout session. Subject to RG daily deposit limits.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositInput"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositSession"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /payments/withdraw:
+    post:
+      tags: [Payments]
+      summary: Request a withdrawal
+      description: Two-phase withdrawal — moves funds from balance to reserved_balance.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: integer
+                  format: int64
+                  description: Amount in cents
+      responses:
+        "200":
+          description: Withdrawal requested
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /payments/history:
+    get:
+      tags: [Payments]
+      summary: Get payment history
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Payment records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+
+  # --- Sportsbook ---
+  /sportsbook/sports:
+    get:
+      tags: [Sportsbook]
+      summary: List active sports
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Sports list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sport"
+
+  /sportsbook/sports/{sportID}/events:
+    get:
+      tags: [Sportsbook]
+      summary: List events for a sport
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: sportID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Events list (upcoming + live)
+
+  /sportsbook/events/{eventID}/markets:
+    get:
+      tags: [Sportsbook]
+      summary: List markets for an event
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: eventID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Open markets
+
+  /sportsbook/markets/{marketID}/selections:
+    get:
+      tags: [Sportsbook]
+      summary: List selections for a market
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: marketID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Active selections with odds
+
+  /sportsbook/bets:
+    post:
+      tags: [Sportsbook]
+      summary: Place a bet
+      description: Deducts stake from player wallet. Subject to RG daily bet limits.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceBetInput"
+      responses:
+        "201":
+          description: Bet placed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceBetResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /sportsbook/bets/me:
+    get:
+      tags: [Sportsbook]
+      summary: List my bets
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Player bet history (last 50)
+
+  # --- Quests ---
+  /quests:
+    get:
+      tags: [Quests]
+      summary: List active quests
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Active quests with player progress
+
+  /quests/{id}/claim:
+    post:
+      tags: [Quests]
+      summary: Claim quest reward
+      description: 3-gate evaluation — engagement score, eligibility, budget.
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reward claimed
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # --- Engagement ---
+  /engagement/me:
+    get:
+      tags: [Engagement]
+      summary: Get my engagement score
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Engagement signals and computed score
+
+  /engagement/signal:
+    post:
+      tags: [Engagement]
+      summary: Record an engagement signal
+      description: Signals auto-feed gamification scoring.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EngagementSignalInput"
+      responses:
+        "200":
+          description: Signal recorded
+
+  # --- Predictions ---
+  /predictions/markets:
+    get:
+      tags: [Predictions]
+      summary: List prediction markets
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Open prediction markets
+
+  /predictions/markets/{id}:
+    get:
+      tags: [Predictions]
+      summary: Get market detail
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Market detail with pools
+
+  /predictions/markets/{id}/stake:
+    post:
+      tags: [Predictions]
+      summary: Place a stake on a prediction market
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StakeInput"
+      responses:
+        "201":
+          description: Stake placed
+
+  /predictions/positions:
+    get:
+      tags: [Predictions]
+      summary: List my prediction positions
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Player stakes across markets
+
+  # --- AI ---
+  /ai/conversations:
+    post:
+      tags: [AI]
+      summary: Create a new AI conversation
+      security:
+        - PlayerAuth: []
+      responses:
+        "201":
+          description: Conversation created
+    get:
+      tags: [AI]
+      summary: List AI conversations
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Conversation list
+
+  /ai/conversations/{id}/messages:
+    post:
+      tags: [AI]
+      summary: Send a message to AI
+      description: LLM dispatch with output moderation.
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: AI response
+    get:
+      tags: [AI]
+      summary: Get conversation messages
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message history
+
+  # --- Video ---
+  /video/sessions:
+    post:
+      tags: [Video]
+      summary: Start a video session
+      security:
+        - PlayerAuth: []
+      responses:
+        "201":
+          description: Session started
+    get:
+      tags: [Video]
+      summary: List video sessions
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Session list
+
+  /video/sessions/{id}/end:
+    post:
+      tags: [Video]
+      summary: End a video session
+      description: Records duration-based engagement signal (videoMinutes).
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session ended
+
+  # --- Social ---
+  /social/posts:
+    post:
+      tags: [Social]
+      summary: Create a social post
+      description: Auto-records socialInteractions engagement signal.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        "201":
+          description: Post created
+    get:
+      tags: [Social]
+      summary: List social posts (global feed)
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Post feed
+
+  /social/posts/{id}:
+    delete:
+      tags: [Social]
+      summary: Delete own post
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Post deleted
+
+  # --- Plugins ---
+  /plugins:
+    get:
+      tags: [Plugins]
+      summary: List registered plugins
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Plugin list
+
+  /plugins/dispatch:
+    post:
+      tags: [Plugins]
+      summary: Dispatch a plugin
+      description: Guard chain — rate-limit → circuit-breaker → idempotency → execute.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginDispatchInput"
+      responses:
+        "200":
+          description: Dispatch result
+
+  /plugins/{pluginID}/dispatches:
+    get:
+      tags: [Plugins]
+      summary: List dispatch history for a plugin
+      security:
+        - PlayerAuth: []
+      parameters:
+        - name: pluginID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dispatch records
+
+  # --- RNG ---
+  /rng/random:
+    post:
+      tags: [RNG]
+      summary: Get random numbers
+      description: RANDOM.ORG true random with local CSPRNG fallback.
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RNGInput"
+      responses:
+        "200":
+          description: Random numbers generated
+
+  # --- Slots ---
+  /slots/games:
+    get:
+      tags: [Slots]
+      summary: List slot games
+      description: Proxied from Slotopol (340 games across 11 providers).
+      security:
+        - PlayerAuth: []
+      responses:
+        "200":
+          description: Slot game catalog
+
+  /slots/spin:
+    post:
+      tags: [Slots]
+      summary: Spin a slot
+      security:
+        - PlayerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlotSpinInput"
+      responses:
+        "200":
+          description: Spin result
+
+  # --- Admin: Players ---
+  /admin/players:
+    get:
+      tags: ["Admin: Players"]
+      summary: Search players
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Player list
+
+  /admin/players/{id}:
+    get:
+      tags: ["Admin: Players"]
+      summary: Get player detail
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Full player detail (profile + balances + recent activity)
+
+  /admin/players/{id}/status:
+    patch:
+      tags: ["Admin: Players"]
+      summary: Update player status
+      description: Requires admin or superadmin role.
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+      responses:
+        "200":
+          description: Status updated
+
+  # --- Admin: Bonuses ---
+  /admin/bonuses:
+    get:
+      tags: ["Admin: Bonuses"]
+      summary: List bonuses
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Bonus definitions
+    post:
+      tags: ["Admin: Bonuses"]
+      summary: Create a bonus
+      description: Requires admin or superadmin role.
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBonusInput"
+      responses:
+        "201":
+          description: Bonus created
+
+  /admin/bonuses/{id}/status:
+    patch:
+      tags: ["Admin: Bonuses"]
+      summary: Update bonus status
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Status updated
+
+  # --- Admin: Sportsbook ---
+  /admin/sportsbook/events:
+    get:
+      tags: ["Admin: Sportsbook"]
+      summary: List sportsbook events
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Event list
+    post:
+      tags: ["Admin: Sportsbook"]
+      summary: Create a sportsbook event
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventInput"
+      responses:
+        "201":
+          description: Event created
+
+  /admin/sportsbook/events/{id}/status:
+    patch:
+      tags: ["Admin: Sportsbook"]
+      summary: Update event status
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Status updated
+
+  /admin/sportsbook/events/{id}/settle:
+    post:
+      tags: ["Admin: Sportsbook"]
+      summary: Settle an event
+      description: Superadmin only. Settles all bets — won/lost/voided.
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Settlement result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettleEventResult"
+
+  # --- Admin: Reports ---
+  /admin/reports/dashboard:
+    get:
+      tags: ["Admin: Reports"]
+      summary: Get dashboard stats
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Dashboard statistics (player count, GGR, deposits, etc.)
+
+  /admin/reports/transactions:
+    get:
+      tags: ["Admin: Reports"]
+      summary: Get transaction report
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Transaction summary by type and date
+
+  # --- Admin: Affiliates ---
+  /admin/affiliates:
+    get:
+      tags: ["Admin: Affiliates"]
+      summary: List affiliates
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Affiliate list
+
+  /admin/affiliates/{id}/status:
+    patch:
+      tags: ["Admin: Affiliates"]
+      summary: Update affiliate status
+      description: Lifecycle — pending → active → suspended/rejected.
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Status updated
+
+  # --- Admin: Quests ---
+  /admin/quests:
+    get:
+      tags: ["Admin: Quests"]
+      summary: List quests
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Quest list
+    post:
+      tags: ["Admin: Quests"]
+      summary: Create a quest
+      description: Name is required.
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestInput"
+      responses:
+        "201":
+          description: Quest created
+
+  /admin/quests/{id}/toggle:
+    patch:
+      tags: ["Admin: Quests"]
+      summary: Toggle quest active/inactive
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Quest toggled
+
+  # --- Admin: Moderation ---
+  /admin/moderation/posts:
+    get:
+      tags: ["Admin: Moderation"]
+      summary: List flagged social posts
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Flagged posts
+
+  /admin/moderation/dispatches:
+    get:
+      tags: ["Admin: Moderation"]
+      summary: List plugin dispatches (moderation view)
+      security:
+        - AdminAuth: []
+      responses:
+        "200":
+          description: Dispatch records with moderation actions
+
+  /admin/moderation/posts/{id}:
+    delete:
+      tags: ["Admin: Moderation"]
+      summary: Delete a flagged post
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Post deleted
+
+components:
+  securitySchemes:
+    PlayerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Player JWT (realm=player)
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin JWT (realm=admin, 3-tier RBAC — viewer, admin, superadmin)
+    AffiliateAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Affiliate JWT (realm=affiliate)
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ConflictError:
+      description: Resource conflict (e.g., duplicate email)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AccountLockedError:
+      description: Account locked (too many failed attempts)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: invalid email format
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        database:
+          type: string
+          example: connected
+
+    RegisterInput:
+      type: object
+      required: [email, password, currency]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          example: EUR
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResult:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT bearer token
+        player_id:
+          type: string
+          format: uuid
+
+    PasswordResetResult:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Reset token (in production, sent via email)
+        expires_at:
+          type: string
+          format: date-time
+
+    AffiliateRegisterInput:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+
+    PlayerProfile:
+      type: object
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        currency:
+          type: string
+        balance:
+          type: integer
+          format: int64
+        bonus_balance:
+          type: integer
+          format: int64
+        reserved_balance:
+          type: integer
+          format: int64
+
+    Balances:
+      type: object
+      properties:
+        balance:
+          type: integer
+          format: int64
+          description: Real money balance in cents
+        bonus_balance:
+          type: integer
+          format: int64
+          description: Bonus balance in cents
+        reserved_balance:
+          type: integer
+          format: int64
+          description: Reserved (pending withdrawal) in cents
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        player_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [wallet_deposit, wallet_withdrawal, wallet_withdrawal_processed, bet, win, settlement_loss, cancel_deposit, cancel_bet, cancel_win, wallet_cancel_withdrawal, bonus_credit, bonus_forfeit, bonus_lost, turn_bonus_to_real]
+        amount:
+          type: integer
+          format: int64
+        balance_after:
+          type: integer
+          format: int64
+        bonus_balance_after:
+          type: integer
+          format: int64
+        reserved_balance_after:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        player_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [deposit, withdrawal]
+        amount:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, completed, failed, cancelled, refunded]
+        provider:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DepositInput:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: Deposit amount in cents
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        success_url:
+          type: string
+          format: uri
+        cancel_url:
+          type: string
+          format: uri
+
+    DepositSession:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Stripe checkout session ID
+        url:
+          type: string
+          format: uri
+          description: Redirect URL for Stripe Checkout
+
+    Sport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        active:
+          type: boolean
+
+    PlaceBetInput:
+      type: object
+      required: [selection_id, stake]
+      properties:
+        selection_id:
+          type: string
+          format: uuid
+        stake:
+          type: integer
+          format: int64
+          description: Stake in cents
+
+    PlaceBetResult:
+      type: object
+      properties:
+        bet_id:
+          type: string
+          format: uuid
+        stake:
+          type: integer
+          format: int64
+        odds:
+          type: number
+          format: double
+        potential_payout:
+          type: integer
+          format: int64
+
+    SettleEventResult:
+      type: object
+      properties:
+        settled:
+          type: integer
+        won:
+          type: integer
+        lost:
+          type: integer
+        voided:
+          type: integer
+
+    EngagementSignalInput:
+      type: object
+      properties:
+        video_minutes:
+          type: integer
+        social_interactions:
+          type: integer
+        prediction_actions:
+          type: integer
+
+    StakeInput:
+      type: object
+      required: [outcome, amount]
+      properties:
+        outcome:
+          type: string
+          enum: [a, b]
+        amount:
+          type: integer
+          format: int64
+
+    PluginDispatchInput:
+      type: object
+      required: [plugin_id]
+      properties:
+        plugin_id:
+          type: string
+        input:
+          type: object
+
+    RNGInput:
+      type: object
+      properties:
+        count:
+          type: integer
+          default: 1
+        min:
+          type: integer
+        max:
+          type: integer
+
+    SlotSpinInput:
+      type: object
+      required: [game_id, bet]
+      properties:
+        game_id:
+          type: string
+        bet:
+          type: integer
+          format: int64
+
+    CreateBonusInput:
+      type: object
+      required: [name, code, wagering_multiplier]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        wagering_multiplier:
+          type: number
+        min_deposit:
+          type: integer
+          format: int64
+        max_bonus:
+          type: integer
+          format: int64
+        days_until_expiry:
+          type: integer
+
+    CreateEventInput:
+      type: object
+      required: [name, sport_id, starts_at]
+      properties:
+        name:
+          type: string
+        sport_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+
+    CreateQuestInput:
+      type: object
+      required: [title, reward_type, reward_value]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        reward_type:
+          type: string
+          enum: [bonus_credit, free_spin]
+        reward_value:
+          type: integer
+          format: int64
+        min_score:
+          type: integer
