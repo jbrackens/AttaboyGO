@@ -63,6 +63,7 @@ type Payline struct {
 }
 
 // ListGames returns the available game catalog from Slotopol.
+// Returns an empty list if the Slotopol service is unreachable.
 func (c *SlotopolClient) ListGames(ctx context.Context) ([]SlotopolGame, error) {
 	url := fmt.Sprintf("%s/games", c.baseURL)
 
@@ -73,12 +74,14 @@ func (c *SlotopolClient) ListGames(ctx context.Context) ([]SlotopolGame, error) 
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch games: %w", err)
+		c.logger.Warn("slotopol service unreachable, returning empty game list", "error", err)
+		return []SlotopolGame{}, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("slotopol returned %d", resp.StatusCode)
+		c.logger.Warn("slotopol returned non-200, returning empty game list", "status", resp.StatusCode)
+		return []SlotopolGame{}, nil
 	}
 
 	var games []SlotopolGame

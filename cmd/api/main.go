@@ -46,6 +46,11 @@ func run(logger *slog.Logger) error {
 	defer pool.Close()
 	logger.Info("connected to postgres")
 
+	// Run pending migrations
+	if err := infra.RunMigrations(cfg.DSN(), logger); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
 	// Parse JWT expiry durations
 	playerExpiry, err := time.ParseDuration(cfg.JWTPlayerExpiry)
 	if err != nil {
